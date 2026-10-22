@@ -256,13 +256,16 @@ router.post('/register', wrap(async (req, res) => {
   if (wantsQuestion && !validQuestion(body.question, body.answer)) return res.status(400).json(QUESTION_PROBLEM);
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return res.status(409).json(EMAIL_TAKEN);
   const taken = { error: 'Nama pengguna itu sudah ada yang pakai. Coba nama lain, ya.' };
-  const username = requestedUsername || usernameFromEmail(email);
-  if (requestedUsername && db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) return res.status(409).json(taken);
+  if (requestedUsername && db.prepare('SELECT 1 FROM users WHERE username = ?').get(requestedUsername)) return res.status(409).json(taken);
+  let username = requestedUsername;
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = await hashPassword(password, salt);
   let userId;
   try {
     userId = db.transaction(() => {
+      // Chosen here, at the last synchronous moment, so two simultaneous sign-ups cannot derive
+      // the same handle from their emails and have one fail on the unique constraint.
+      if (!username) username = usernameFromEmail(email);
       const first = userCount() === 0;
       const id = db.prepare('INSERT INTO users (username, email, name, pass_hash, pass_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(username, email, name, hash, salt, Date.now()).lastInsertRowid;
