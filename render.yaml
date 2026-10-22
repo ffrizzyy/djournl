@@ -2,13 +2,13 @@
 # A disk needs a paid instance type — on the free one the journal would vanish on every restart.
 services:
   - type: web
-    name: azzifa
+    name: djournl
     runtime: docker
     plan: starter
     region: singapore
     healthCheckPath: /healthz
     disk:
-      name: azzifa-data
+      name: djournl-data
       mountPath: /app/data
       sizeGB: 1
     envVars:

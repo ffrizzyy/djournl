@@ -10,7 +10,7 @@ const { utcDay, shiftDay } = require('../server/day');
 
 const PORT = 3491;
 const BASE = `http://127.0.0.1:${PORT}`;
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'azzifa-test-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'djournl-test-'));
 let server;
 
 before(async () => {

@@ -6,7 +6,7 @@ const express = require('express');
 const db = require('./db');
 
 const scrypt = promisify(crypto.scrypt);
-const COOKIE = 'azzifa_sid';
+const COOKIE = 'djournl_sid';
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 const USERNAME_RE = /^[a-z0-9_.-]{3,24}$/;
 

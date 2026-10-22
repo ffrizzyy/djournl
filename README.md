@@ -1,6 +1,6 @@
-# Azzifa
+# Djournl
 
-Akses hasil deploy disini: https://azzifa.up.railway.app/
+Akses hasil deploy disini: https://djournl.up.railway.app/
 
 Jurnal harian dengan mood tracker (beberapa catatan per hari), dashboard tren mood, pengamatan pola AI mingguan, dan rangkuman kegiatan AI — versi standalone yang bisa dijalankan sendiri atau di-deploy ke server mana pun.
 
@@ -46,7 +46,7 @@ npm test   # menjalankan server sungguhan dengan database sementara, lalu menguj
 | Variabel | Default | Fungsi |
 |---|---|---|
 | `PORT` | `3000` | Port server |
-| `DATA_DIR` | `./data` | Folder tempat `azzifa.sqlite` disimpan. Arahkan ke disk persisten saat deploy |
+| `DATA_DIR` | `./data` | Folder tempat `djournl.sqlite` disimpan. Arahkan ke disk persisten saat deploy |
 | `ALLOW_SIGNUP` | `true` | `false` menutup pendaftaran akun baru (akun pertama selalu bisa dibuat) |
 | `SIGNUPS_PER_HOUR` | `10` | Batas pembuatan akun per jam dari satu alamat IP |
 | `AI_DAILY_LIMIT` | `30` | Batas permintaan AI per akun per hari, karena semua akun memakai kunci API yang sama |
@@ -76,7 +76,7 @@ Lihat `.env.example` untuk daftar lengkap variabelnya.
 cp .env.example .env   # isi provider AI kalau mau
 docker compose up -d --build
 ```
-Data SQLite tersimpan di volume bernama `azzifa-data`, jadi tetap ada walau container dihapus dan dibuat ulang.
+Data SQLite tersimpan di volume bernama `djournl-data`, jadi tetap ada walau container dihapus dan dibuat ulang.
 
 **VPS / server sendiri (tanpa Docker):**
 ```bash
@@ -87,7 +87,7 @@ npm start   # pakai pm2 atau systemd supaya tetap jalan setelah SSH ditutup
 
 **Platform dengan disk persisten (Render, Railway, Fly.io, dll.):** set environment variables lewat dashboard platform tersebut, lalu pastikan folder `data/` dipetakan ke volume/disk persisten (atau set `DATA_DIR` ke lokasi disk itu) — bukan sekadar filesystem sementara, atau riwayat jurnal akan hilang saat container di-restart.
 
-**Yang TIDAK akan berfungsi:** platform serverless/edge murni (Vercel Functions, Netlify Functions, Cloudflare Workers). Azzifa memakai file SQLite di disk, dan platform-platform itu tidak punya filesystem persisten antar request. Kalau memang butuh serverless, itu berarti mengganti `server/db.js` ke database terkelola (Postgres, Turso, dsb.) — perubahan arsitektur, bukan sekadar konfigurasi.
+**Yang TIDAK akan berfungsi:** platform serverless/edge murni (Vercel Functions, Netlify Functions, Cloudflare Workers). Djournl memakai file SQLite di disk, dan platform-platform itu tidak punya filesystem persisten antar request. Kalau memang butuh serverless, itu berarti mengganti `server/db.js` ke database terkelola (Postgres, Turso, dsb.) — perubahan arsitektur, bukan sekadar konfigurasi.
 
 Ada endpoint `GET /healthz` yang mengembalikan `{ok:true}` untuk health check platform deploy.
 
@@ -100,10 +100,10 @@ Ada endpoint `GET /healthz` yang mengembalikan `{ok:true}` untuk health check pl
 - **Streak bareng** (`server/circles.js`) — grup, kode undangan, dan perhitungan streak grup.
 - **Tanggal** (`server/day.js`) — "hari ini" adalah tanggal lokal penulisnya, bukan jam server. Browser mengirimnya di header `X-Local-Date` pada setiap permintaan; server hanya menerimanya kalau selisihnya paling banyak satu hari dari tanggal UTC server (tidak ada zona waktu yang lebih jauh dari itu), selain itu server memakai tanggal UTC-nya sendiri.
 - **Keamanan dasar** — semua masukan catatan dibersihkan di server sebelum disimpan (tanggal harus nyata, mood harus dikenal, catatan hanya membawa field yang dipakai aplikasi), respons membawa `Content-Security-Policy`, `X-Content-Type-Options`, dan `Referrer-Policy`, dan semua error dijawab dalam JSON.
-- **Database** (`server/db.js`) — SQLite lewat `better-sqlite3`, satu file di `data/azzifa.sqlite`. Skema di-migrasi otomatis: database dari versi satu-pengguna dibangun ulang dengan kolom `user_id`, dan seluruh catatan lamanya diwarisi oleh **akun pertama yang mendaftar**.
+- **Database** (`server/db.js`) — SQLite lewat `better-sqlite3`, satu file di `data/djournl.sqlite`. Skema di-migrasi otomatis: database dari versi satu-pengguna dibangun ulang dengan kolom `user_id`, dan seluruh catatan lamanya diwarisi oleh **akun pertama yang mendaftar**.
 
 ```
-azzifa-app/
+djournl-app/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── package.json
@@ -119,7 +119,7 @@ azzifa-app/
 ├── test/           # npm test
 ├── public/
 │   └── index.html  # seluruh frontend
-└── data/           # dibuat otomatis, isi: azzifa.sqlite (jangan di-commit)
+└── data/           # dibuat otomatis, isi: djournl.sqlite (jangan di-commit)
 ```
 
 ## API
@@ -166,15 +166,15 @@ Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `
 - **Hapus akun bersifat permanen.** Tidak ada masa tunggu atau tempat sampah. Cadangkan dulu lewat Riwayat kalau catatannya masih diinginkan.
 - **Pendaftaran terbuka secara default.** Siapa pun yang tahu alamat server bisa membuat akun (jurnal tiap akun tetap terpisah). Set `ALLOW_SIGNUP=false` setelah semua orang yang kamu ajak sudah mendaftar.
 - **Pakai HTTPS kalau di-deploy.** Kata sandi dikirim saat masuk; tanpa HTTPS ia lewat jaringan tanpa enkripsi. Di balik reverse proxy HTTPS, cookie sesi otomatis diberi tanda `Secure`.
-- **Streak bareng hanya antar akun di server yang sama.** Dua instalasi Azzifa yang terpisah tidak bisa saling terhubung.
+- **Streak bareng hanya antar akun di server yang sama.** Dua instalasi Djournl yang terpisah tidak bisa saling terhubung.
 - **Kunci AI dipakai bersama.** Semua akun memakai provider AI yang sama dari `.env`, jadi biayanya ditanggung pemilik server.
 - **Input suara** pakai Web Speech API bawaan browser — tidak jalan di Firefox, dan tetap butuh koneksi internet meski datanya sendiri sudah lokal.
 - **Pengingat** cuma aktif kalau tab browser masih terbuka (pakai Notification API bawaan browser), dan muncul saat tab itu sedang tidak dilihat. Sapaan di dalam aplikasi tetap jadi jaring pengaman kalau notifikasi tidak didukung/ditolak.
 - **Catatan lama memakai tanggal UTC.** Versi awal menentukan "hari ini" dengan UTC, jadi catatan yang ditulis sebelum pukul 07.00 WIB tersimpan di tanggal sehari sebelumnya. Catatan baru memakai tanggal lokal; catatan lama tidak digeser otomatis.
 - **Satu hari disimpan utuh.** Kalau jurnal yang sama dibuka di dua perangkat sekaligus dan keduanya menyimpan catatan untuk hari yang sama, simpanan terakhir yang menang.
 - **Draf tersimpan di browser.** Tulisan yang belum disimpan diingat di perangkat itu (bukan di server) sampai disimpan atau sampai keluar akun.
-- **Foto disimpan di dalam database.** Sebelum diunggah, browser mengecilkan tiap foto (sisi terpanjang 1600 px, JPEG), yang sekaligus membuang data lokasi dari kamera. Foto tersimpan di `azzifa.sqlite` bersama catatannya, jadi memindahkan satu file itu sudah membawa semuanya, tapi ukuran file ikut membesar. Foto ikut terhapus saat catatannya dihapus, dan ikut masuk ke cadangan `.json`.
-- **Kamera butuh HTTPS atau localhost.** Tombol Kamera menyalakan kamera langsung di halaman (pratinjau, tombol jepret, ganti kamera) di ponsel maupun komputer, tapi browser hanya mengizinkannya lewat HTTPS atau `localhost`. Kalau Azzifa dibuka lewat alamat `http://` biasa (misalnya IP di jaringan rumah), tombol itu jatuh ke pemilih bawaan perangkat: di ponsel tetap membuka aplikasi kamera, di komputer membuka pemilih file.
+- **Foto disimpan di dalam database.** Sebelum diunggah, browser mengecilkan tiap foto (sisi terpanjang 1600 px, JPEG), yang sekaligus membuang data lokasi dari kamera. Foto tersimpan di `djournl.sqlite` bersama catatannya, jadi memindahkan satu file itu sudah membawa semuanya, tapi ukuran file ikut membesar. Foto ikut terhapus saat catatannya dihapus, dan ikut masuk ke cadangan `.json`.
+- **Kamera butuh HTTPS atau localhost.** Tombol Kamera menyalakan kamera langsung di halaman (pratinjau, tombol jepret, ganti kamera) di ponsel maupun komputer, tapi browser hanya mengizinkannya lewat HTTPS atau `localhost`. Kalau Djournl dibuka lewat alamat `http://` biasa (misalnya IP di jaringan rumah), tombol itu jatuh ke pemilih bawaan perangkat: di ponsel tetap membuka aplikasi kamera, di komputer membuka pemilih file.
 - **Foto tidak dikirim ke AI.** Rangkuman dan pengamatan hanya membaca teks catatan.
 
 ## Pengujian

@@ -1,10 +1,10 @@
-# Memasang Azzifa di internet
+# Memasang Djournl di internet
 
-Panduan ini untuk memindahkan Azzifa dari `localhost` ke alamat yang bisa dibuka dari mana saja.
+Panduan ini untuk memindahkan Djournl dari `localhost` ke alamat yang bisa dibuka dari mana saja.
 
 ## Tiga hal yang wajib ada di tempat hosting
 
-1. **Disk yang tidak hilang saat restart.** Seluruh jurnal, akun, dan foto ada di satu file, `data/azzifa.sqlite`. Hosting yang "serverless" atau yang disknya sementara (Vercel, Netlify, Cloudflare Workers, paket gratis tanpa disk) akan menghapus semuanya setiap kali aplikasi dinyalakan ulang.
+1. **Disk yang tidak hilang saat restart.** Seluruh jurnal, akun, dan foto ada di satu file, `data/djournl.sqlite`. Hosting yang "serverless" atau yang disknya sementara (Vercel, Netlify, Cloudflare Workers, paket gratis tanpa disk) akan menghapus semuanya setiap kali aplikasi dinyalakan ulang.
 2. **HTTPS.** Tanpa HTTPS, kata sandi lewat tanpa enkripsi dan tombol Kamera tidak bisa menyalakan kamera. Semua pilihan di bawah memberi HTTPS otomatis.
 3. **Tepat satu salinan aplikasi yang berjalan.** Karena databasenya satu file, jangan menambah jumlah instance; salinan kedua akan punya database kosong sendiri.
 
@@ -38,13 +38,13 @@ Semua platform itu berbayar atau meminta kartu untuk disk persisten. Cek harga t
    ```bash
    fly auth login
    ```
-2. Dari folder proyek, daftarkan aplikasinya memakai `fly.toml` yang sudah ada. Nama aplikasi harus unik; ganti kalau `azzifa` sudah dipakai orang.
+2. Dari folder proyek, daftarkan aplikasinya memakai `fly.toml` yang sudah ada. Nama aplikasi harus unik; ganti kalau `djournl` sudah dipakai orang.
    ```bash
    fly launch --copy-config --no-deploy
    ```
 3. Buat disk 1 GB untuk database di Singapura:
    ```bash
-   fly volumes create azzifa_data --region sin --size 1
+   fly volumes create djournl_data --region sin --size 1
    ```
 4. Isi rahasianya (tidak pernah masuk ke git):
    ```bash
@@ -63,7 +63,7 @@ Memperbarui setelah ada perubahan kode: `fly deploy` lagi. Datanya aman karena a
 
 ## B. Railway
 
-1. Di https://railway.app pilih **New Project → Deploy from GitHub repo**, lalu pilih repo `azzifa`. Railway membangun dari `Dockerfile` secara otomatis.
+1. Di https://railway.app pilih **New Project → Deploy from GitHub repo**, lalu pilih repo `djournl`. Railway membangun dari `Dockerfile` secara otomatis.
 2. Di layanan itu, tambahkan **Volume** dengan mount path `/app/data`.
 3. Di tab **Variables**, isi `SIGNUP_CODE`, `TRUST_PROXY=1`, `PORT=3000`, dan (opsional) `ANTHROPIC_API_KEY`.
 4. Di **Settings → Networking**, buat domain publik (port `3000`).
@@ -72,7 +72,7 @@ Setiap `git push` ke `main` akan memasang versi baru.
 
 ## C. Render
 
-1. Di https://render.com pilih **New → Blueprint**, lalu pilih repo `azzifa`. Render membaca `render.yaml`: satu layanan Docker dengan disk 1 GB di `/app/data`.
+1. Di https://render.com pilih **New → Blueprint**, lalu pilih repo `djournl`. Render membaca `render.yaml`: satu layanan Docker dengan disk 1 GB di `/app/data`.
 2. Saat diminta, isi `SIGNUP_CODE` dan (opsional) `ANTHROPIC_API_KEY`.
 3. Tunggu sampai statusnya *Live*, lalu buka alamat `onrender.com` yang diberikan.
 
@@ -83,8 +83,8 @@ Disk di Render butuh paket berbayar; `render.yaml` sudah memilih paket `starter`
 Yang dibutuhkan: server Linux dengan Docker, dan sebuah domain yang record **A**-nya menunjuk ke IP server itu. Port 80 dan 443 harus terbuka.
 
 ```bash
-git clone https://github.com/ffrizzyy/azzifa.git
-cd azzifa
+git clone https://github.com/ffrizzyy/djournl.git
+cd djournl
 cp .env.example .env
 ```
 
@@ -118,8 +118,8 @@ Memperbarui: `git pull`, lalu perintah `up -d --build` yang sama.
 
 Catatan yang sudah kamu tulis di `localhost` tidak ikut terpasang. Untuk membawanya:
 
-1. Di Azzifa lokal: **Riwayat → Cadangkan .json**.
-2. Di Azzifa yang sudah terpasang, masuk ke akunmu: **Riwayat → Pulihkan cadangan**, pilih file tadi.
+1. Di Djournl lokal: **Riwayat → Cadangkan .json**.
+2. Di Djournl yang sudah terpasang, masuk ke akunmu: **Riwayat → Pulihkan cadangan**, pilih file tadi.
 
 Foto ikut di dalam file cadangan itu.
 
@@ -132,7 +132,7 @@ Database hidup di satu disk; kalau disk itu rusak atau terhapus, semuanya ikut h
 fly ssh console -C "npm run backup"
 
 # VPS
-docker compose -f docker-compose.prod.yml exec azzifa npm run backup
+docker compose -f docker-compose.prod.yml exec djournl npm run backup
 ```
 
 Perintah itu membuat salinan utuh di `data/backups/` yang aman dijalankan saat aplikasi sedang dipakai. Salinan itu masih di disk yang sama, jadi **unduh ke tempat lain** secara berkala (misalnya dengan `fly ssh sftp get` atau `docker cp`).
@@ -148,7 +148,7 @@ Yang ingat jawaban **pertanyaan pribadinya** bisa mengatur ulang sendiri lewat "
 fly ssh console -C "npm run reset-password -- nama-pengguna"
 
 # VPS
-docker compose -f docker-compose.prod.yml exec azzifa npm run reset-password -- nama-pengguna
+docker compose -f docker-compose.prod.yml exec djournl npm run reset-password -- nama-pengguna
 ```
 
 Perintah itu mencetak kata sandi sementara dan mengeluarkan akun itu dari semua perangkat. Berikan kata sandinya ke pemilik akun, lalu minta ia menggantinya dan mengatur ulang pertanyaan pribadinya di halaman Profil. Di Railway, jalankan perintah yang sama lewat shell layanannya.

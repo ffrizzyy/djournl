@@ -6,7 +6,7 @@
 <script>
 (function(){
   try{
-    var saved = localStorage.getItem('azzifa_theme');
+    var saved = localStorage.getItem('djournl_theme');
     var theme = saved === 'dark' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', theme);
   }catch(e){}
@@ -14,8 +14,8 @@
 </script>
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Azzifa</title>
-<meta name="description" content="Azzifa — teman refleksi harian: jurnal, mood, dan streak bareng orang terdekat.">
+<title>Djournl</title>
+<meta name="description" content="Djournl — teman refleksi harian: jurnal, mood, dan streak bareng orang terdekat.">
 <meta name="theme-color" content="#FAF4F2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&display=swap" rel="stylesheet">
@@ -515,7 +515,7 @@
 </head>
 <body>
 <div class="app" id="app"></div>
-<noscript><p style="max-width:32ch; margin:20vh auto; padding:0 16px; text-align:center; line-height:1.6;">Azzifa butuh JavaScript untuk menyimpan ceritamu. Aktifkan dulu di browser, ya.</p></noscript>
+<noscript><p style="max-width:32ch; margin:20vh auto; padding:0 16px; text-align:center; line-height:1.6;">Djournl butuh JavaScript untuk menyimpan ceritamu. Aktifkan dulu di browser, ya.</p></noscript>
 <div class="toast" id="toast"></div>
 <div id="printArea"></div>
 
@@ -749,7 +749,7 @@ async function initStorage(){
     entriesReady = true; syncPromptOnce();
   }catch(e){
     entriesReady = true;
-    showToast('Azzifa belum bisa terhubung ke server. Coba muat ulang sebentar lagi, ya.');
+    showToast('Djournl belum bisa terhubung ke server. Coba muat ulang sebentar lagi, ya.');
   }
   render();
   if(me && !tourDone) setTimeout(startTour, 1500);   // after the greeting has had its moment
@@ -769,7 +769,7 @@ function asDate(d){ return typeof d==='string' && /^\d{4}-\d{2}-\d{2}$/.test(d) 
 
 // The unsaved draft survives a refresh or an accidental tab close. It is kept in this browser
 // only, per account and per day, and cleared once the note is saved or the account signs out.
-const draftKey = () => 'azzifa_draft_' + (me ? me.username : '');
+const draftKey = () => 'djournl_draft_' + (me ? me.username : '');
 function saveDraft(){
   if(!me || editingIdx!==null) return;   // editing an existing note is not a draft worth restoring
   try{
@@ -927,7 +927,7 @@ function setTheme(next){ if(getTheme()!==next) toggleTheme(); }
 function toggleTheme(){
   const next = getTheme()==='dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
-  try{ localStorage.setItem('azzifa_theme', next); }catch(e){}
+  try{ localStorage.setItem('djournl_theme', next); }catch(e){}
   render();
 }
 
@@ -1059,7 +1059,7 @@ function checkReminderTick(){
   // minute — and only while the tab is hidden: when it is open, the greeting does the reminding.
   if(hm>=reminder.time && notifiedDay!==todayStr() && document.hidden){
     notifiedDay=todayStr();
-    try{ new Notification('Azzifa',{body:'Waktunya mampir sebentar. Tidak perlu panjang, yang penting kamu cerita.'}); }catch(e){}
+    try{ new Notification('Djournl',{body:'Waktunya mampir sebentar. Tidak perlu panjang, yang penting kamu cerita.'}); }catch(e){}
   }
 }
 setInterval(checkReminderTick, 30000);
@@ -1201,8 +1201,8 @@ function closePhoto(){ document.getElementById('lightbox')?.remove(); }
 const harianFinished = () => dayMode==='daily' && todayNotes().length>=DAILY_STEPS.length && editingIdx===null;
 const TOUR = [
   {tab:'today', title:()=>`Selamat datang, ${esc(me.name)}`,
-   text:'Azzifa itu tempat cerita harianmu. Aku temani keliling sebentar, ya. Kurang dari semenit, dan bisa kamu lewati kapan saja.'},
-  {tab:'today', around:['.composer .mode-switch', '.composer .mode-hint'], title:'Kartu tulis, inti Azzifa',
+   text:'Djournl itu tempat cerita harianmu. Aku temani keliling sebentar, ya. Kurang dari semenit, dan bisa kamu lewati kapan saja.'},
+  {tab:'today', around:['.composer .mode-switch', '.composer .mode-hint'], title:'Kartu tulis, inti Djournl',
    text:'Semua berpusat di kartu ini. <b>Harian</b> menuntunmu lewat empat langkah, dari pagi sampai penutup hari. <b>Check Up</b> memberi satu pertanyaan bebas yang bisa kamu ganti sesukamu.'},
   {tab:'today', when:()=>!harianFinished(), around:['.composer .prompt-text', '.field-row', '.photo-bar'], title:'Tulis, ucapkan, atau potret',
    text:'Jawab dengan caramu: ketik apa saja, tekan <b>mikrofon</b> untuk bercerita, atau tambahkan sampai empat foto lewat <b>Kamera</b> dan <b>Galeri</b>. Sisipkan <b>#tag</b> seperti #kerja supaya gampang dicari nanti.'},
@@ -1228,7 +1228,7 @@ const TOUR = [
    text:'Catatanmu akan berkumpul di sini. Nanti ada kotak pencarian, saringan mood dan #tag, serta bintang untuk menandai favorit.'},
   {tab:'history', target:['.actions'], title:'Bawa pulang ceritamu',
    text:()=>entries.length ? 'Ekspor jadi teks, cetak atau simpan sebagai PDF, dan <b>cadangkan</b> ke file .json yang bisa dipulihkan lagi kapan saja, lengkap dengan fotonya.'
-                           : 'Punya file cadangan dari Azzifa lain? Pulihkan di sini. Setelah kamu punya catatan, tombol ekspor, cetak, dan cadangkan juga muncul di sini.'},
+                           : 'Punya file cadangan dari Djournl lain? Pulihkan di sini. Setelah kamu punya catatan, tombol ekspor, cetak, dan cadangkan juga muncul di sini.'},
   {tab:'profile', target:['.settings-card'], title:'Profil dan pengaturan',
    text:'Di halaman ini kamu mengganti nama dan kata sandi, mengatur pengingat harian, tema, dan mode menulis. Tombol <b>Keluar</b> ada di kartu Akun.'},
   {tab:'today', title:'Sekarang giliranmu',
@@ -1364,7 +1364,7 @@ document.addEventListener('keydown', e=>{
 });
 // ---------- Profil: profile, settings and sign-out in one place ----------
 function formError(id, msg){ const el=document.getElementById(id); if(el){ el.textContent=msg; el.hidden=false; } }
-const OFFLINE_NOTE = 'Azzifa belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.';
+const OFFLINE_NOTE = 'Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.';
 async function saveName(ev){
   ev.preventDefault();
   document.getElementById('nameErr').hidden = true;
@@ -1489,7 +1489,7 @@ function renderProfile(){
         </div>
       </div>
       <div class="setting">
-        <div><div class="setting-title">Tur fitur</div><div class="setting-hint">Keliling lagi melihat semua fitur Azzifa.</div></div>
+        <div><div class="setting-title">Tur fitur</div><div class="setting-hint">Keliling lagi melihat semua fitur Djournl.</div></div>
         <button class="btn-ghost-sm" onclick="startTour()">Lihat lagi</button>
       </div>
     </section>
@@ -1679,7 +1679,7 @@ async function generateDaySummary(){
       const entry = {...existing, daySummary:{text:data.text, at:data.at}};
       entries=[...entries.filter(e=>e.date!==entry.date), entry];
     }
-  }catch(e){ daySummaryErr='Azzifa belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'; }
+  }catch(e){ daySummaryErr='Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'; }
   daySummaryLoading=false; render();
 }
 
@@ -1695,7 +1695,7 @@ function setRange(n){ chartRange=n; render(); }
 const AI_OFF_NOTE = 'Rangkuman AI belum diaktifkan di server ini. Catatanmu tetap tersimpan seperti biasa.';
 function insightEmptyText(){
   if(!ai.configured) return 'Pengamatan AI belum diaktifkan di server ini. Grafik dan kalendermu tetap jalan seperti biasa.';
-  if(totalNotes()<3) return 'Tulis 3 catatan dulu, ya. Setelah itu Azzifa bisa mengamati polanya.';
+  if(totalNotes()<3) return 'Tulis 3 catatan dulu, ya. Setelah itu Djournl bisa mengamati polanya.';
   return esc(insightNote) || 'Pengamatan minggu ini belum tersedia. Coba buka lagi nanti, ya.';
 }
 function renderChartSVG(days){
@@ -1797,7 +1797,7 @@ async function circleAction(url, opts){
     }
     circles=data; leaveConfirmId=null; refreshCirclesUI();
     return true;
-  }catch(e){ showToast('Azzifa belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); return false; }
+  }catch(e){ showToast('Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); return false; }
 }
 const JSON_POST = body => ({method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
 async function createCircle(ev){
@@ -1871,7 +1871,7 @@ async function submitAuth(ev){
     const res=await api(`/api/auth/${authMode==='register' ? 'register' : authMode==='reset' ? 'reset' : 'login'}`, JSON_POST(body));
     const data=await res.json();
     if(!res.ok) return fail(data.error || 'Belum berhasil masuk. Coba lagi sebentar lagi, ya.');
-  }catch(e){ return fail('Azzifa belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); }
+  }catch(e){ return fail('Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); }
   authBusy=false; tab='today'; animateContent=true; nudgeShown=false; resetQuestion=null;
   initStorage();
 }
@@ -1917,7 +1917,7 @@ function renderAuth(){
       ${reg && authCfg.needsCode ? `<label class="field"><span>Kode pendaftaran</span><input id="authCode" autocomplete="off" autocapitalize="none" spellcheck="false" required placeholder="Dari pemilik server ini"></label>` : ''}`;
   return `<section class="card auth">
     <span class="eyebrow">${reset ? 'Lupa kata sandi' : reg ? 'Akun baru' : 'Selamat datang'}</span>
-    <h2 class="section-h">${reset ? 'Atur ulang kata sandimu' : reg ? 'Buat akun Azzifa' : 'Masuk ke jurnalmu'}</h2>
+    <h2 class="section-h">${reset ? 'Atur ulang kata sandimu' : reg ? 'Buat akun Djournl' : 'Masuk ke jurnalmu'}</h2>
     <p class="summary-hint">${hint}</p>
     <form onsubmit="submitAuth(event)">${fields}
       <p class="summary-err" id="authErr" role="alert" hidden></p>
@@ -2020,7 +2020,7 @@ function printReport(){
   if(entries.length===0){ showToast('Belum ada catatan untuk dicetak. Mulai dari satu catatan dulu, ya.'); return; }
   const sorted=[...entries].sort((a,b)=>a.date.localeCompare(b.date));
   document.getElementById('printArea').innerHTML = `
-    <h2 style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:700;">Azzifa — Catatan Refleksi</h2>
+    <h2 style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:700;">Djournl — Catatan Refleksi</h2>
     <p style="color:#555; font-size:13px;">Diekspor ${fmtDate(todayStr())} · ${totalNotes()} catatan</p>
     ${summaryText ? `<div style="margin-bottom:16px; padding:12px; border:1px solid #ddd; white-space:pre-line; font-size:13.5px; line-height:1.5;"><b>Rangkuman kegiatan (${summaryRange} hari terakhir)</b>\n${esc(summaryText)}</div>` : ''}
     ${sorted.map(e=>`<div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #ddd;">
@@ -2040,7 +2040,7 @@ async function generateSummary(){
     const data = await res.json();
     if(!res.ok){ summaryErr = data.error || 'Rangkumannya belum berhasil dibuat. Coba lagi sebentar lagi, ya.'; }
     else{ summaryText = data.text; summaryAt = data.at; }
-  }catch(e){ summaryErr = 'Azzifa belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'; }
+  }catch(e){ summaryErr = 'Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'; }
   summaryLoading=false; render();
 }
 function renderSummaryCard(){
@@ -2049,7 +2049,7 @@ function renderSummaryCard(){
     const left=SUMMARY_MIN_NOTES-n;
     return `<div class="card summary">
       <h2 class="section-h">Rangkuman kegiatan</h2>
-      <p class="summary-hint">Tulis ${left} catatan lagi, lalu Azzifa bisa merangkum kegiatanmu.</p>
+      <p class="summary-hint">Tulis ${left} catatan lagi, lalu Djournl bisa merangkum kegiatanmu.</p>
       <div class="progress" role="progressbar" aria-label="Catatan menuju rangkuman" aria-valuemin="0" aria-valuemax="${SUMMARY_MIN_NOTES}" aria-valuenow="${n}"><span style="width:${Math.round(n/SUMMARY_MIN_NOTES*100)}%"></span></div>
     </div>`;
   }
@@ -2063,7 +2063,7 @@ function renderSummaryCard(){
       ? '<div class="skeleton" role="status" aria-label="Membuat rangkuman"><span></span><span></span><span></span><span class="short"></span></div>'
       : (summaryText
           ? `<p class="summary-text">${esc(summaryText)}</p><p class="summary-meta">Dibuat ${fmtDate(summaryAt)}</p>`
-          : `<p class="summary-hint">${ai.configured ? 'Ringkas kegiatanmu dari catatan yang sudah kamu tulis.' : 'Di sini nanti Azzifa bisa merangkum kegiatanmu.'}</p>`)}
+          : `<p class="summary-hint">${ai.configured ? 'Ringkas kegiatanmu dari catatan yang sudah kamu tulis.' : 'Di sini nanti Djournl bisa merangkum kegiatanmu.'}</p>`)}
     ${summaryErr ? `<p class="summary-err" role="alert">${esc(summaryErr)}</p>` : ''}
     ${ai.configured ? `<button class="btn-soft" onclick="generateSummary()" ${summaryLoading?'disabled':''}>${summaryText?'Buat ulang rangkuman':'Rangkum kegiatanku'}</button>
     <p class="summary-privacy">Catatan pada rentang ini dikirim ke ${esc(ai.label)} untuk dirangkum.</p>` : `<p class="summary-privacy">${AI_OFF_NOTE}</p>`}
@@ -2136,7 +2136,7 @@ async function readImport(input){
     const list=Array.isArray(data) ? data : (data && data.entries);
     if(!Array.isArray(list) || list.length===0) throw new Error('empty');
     importPending=list;
-  }catch(e){ importPending=null; showToast('File cadangannya belum bisa dibaca. Pastikan itu file .json dari Azzifa, ya.'); }
+  }catch(e){ importPending=null; showToast('File cadangannya belum bisa dibaca. Pastikan itu file .json dari Djournl, ya.'); }
   render();
 }
 function cancelImport(){ importPending=null; render(); }
@@ -2151,7 +2151,7 @@ async function confirmImport(){
       entries=await api('/api/entries').then(r=>r.json());
       showToast(`${data.imported} hari catatanmu sudah kembali.`);
     }
-  }catch(e){ showToast('Azzifa belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); }
+  }catch(e){ showToast('Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); }
   importPending=null; importBusy=false; render();
 }
 // Same in-page two-step confirm as deleting a note: restoring overwrites days that already exist.
@@ -2296,8 +2296,8 @@ function render(){
     <header class="hero${authed ? ' compact' : ''}">
       <div class="topbar">
         <div class="topbar-brand">
-          <img src="${LOGO_URI}" alt="Logo Azzifa" width="28" height="28">
-          <span class="brand-word">Azzifa</span>
+          <img src="${LOGO_URI}" alt="Logo Djournl" width="28" height="28">
+          <span class="brand-word">Djournl</span>
           <span class="date">${dateLabel}</span>
         </div>
         <div class="topbar-actions">
@@ -2308,14 +2308,14 @@ function render(){
       <div class="hero-grid">
       <div class="hero-copy">
         <span class="eyebrow">Jurnal &amp; mood harian</span>
-        <h1 class="hero-h">Teman Refleksi Harian di <span class="brand-name">Azzifa</span></h1>
+        <h1 class="hero-h">Teman Refleksi Harian di <span class="brand-name">Djournl</span></h1>
         <p class="hero-sub">A Zone of Zen, Introspection, Feelings &amp; Affection.</p>
       </div>
       <div class="chat">
         <img class="chat-avatar${intro}" src="${LOGO_URI}" alt="" width="38" height="38">
         <div class="chat-stack">
           <div class="chat-bubble${intro}">
-            <div class="chat-name">Azzifa</div>
+            <div class="chat-name">Djournl</div>
             <div class="chat-text">${getGreeting()}${authed ? ' '+followText : ''}</div>
           </div>
           ${authed ? '' : `<div class="chat-bubble${followCls}"${followCls===' late' ? ` style="animation-delay:${intro?'.85s':'.15s'}"` : ''}${followCls===' ghost' ? ' aria-hidden="true"' : ''}><div class="chat-text">${followText}</div></div>`}

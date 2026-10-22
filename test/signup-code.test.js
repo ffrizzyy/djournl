@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const PORT = 3492;
 const BASE = `http://127.0.0.1:${PORT}`;
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'azzifa-code-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'djournl-code-'));
 let server;
 
 before(async () => {

@@ -1,13 +1,13 @@
 services:
-  azzifa:
+  djournl:
     build: .
     ports:
       - "3000:3000"
     env_file:
       - .env
     volumes:
-      - azzifa-data:/app/data
+      - djournl-data:/app/data
     restart: unless-stopped
 
 volumes:
-  azzifa-data:
+  djournl-data:

@@ -1,9 +1,9 @@
 # Fly.io: one small machine and one volume for the database. See DEPLOY.md.
 #
-# Azzifa keeps everything in a single SQLite file, so it must run as exactly ONE machine.
+# Djournl keeps everything in a single SQLite file, so it must run as exactly ONE machine.
 # Do not scale it out: a second machine would get its own, separate, empty database.
 
-app = "azzifa"            # must be unique across Fly — `fly launch` will offer to change it
+app = "djournl"            # must be unique across Fly — `fly launch` will offer to change it
 primary_region = "sin"    # Singapore, the closest region to Indonesia
 
 [build]
@@ -13,7 +13,7 @@ primary_region = "sin"    # Singapore, the closest region to Indonesia
   TRUST_PROXY = "1"
 
 [mounts]
-  source = "azzifa_data"
+  source = "djournl_data"
   destination = "/app/data"
 
 [http_service]

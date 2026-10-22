@@ -1,4 +1,4 @@
-// Database layer: a real SQLite file on disk (./data/azzifa.sqlite), not localStorage.
+// Database layer: a real SQLite file on disk (./data/djournl.sqlite), not localStorage.
 // Several people can share one server: every journal row belongs to a user, and nothing but
 // "did they write today" is ever shared between them (see circles, below).
 const path = require('path');
@@ -9,7 +9,17 @@ const Database = require('better-sqlite3');
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
-const db = new Database(path.join(dataDir, 'azzifa.sqlite'));
+// The journal used to live in azzifa.sqlite. Renaming the app must not strand the data on an
+// existing disk, so the old file is moved into place (with its WAL sidecars) before it is opened.
+const dbFile = path.join(dataDir, 'djournl.sqlite');
+const legacyDbFile = path.join(dataDir, 'azzifa.sqlite');
+if (!fs.existsSync(dbFile) && fs.existsSync(legacyDbFile)) {
+  for (const suffix of ['', '-wal', '-shm']) {
+    if (fs.existsSync(legacyDbFile + suffix)) fs.renameSync(legacyDbFile + suffix, dbFile + suffix);
+  }
+}
+
+const db = new Database(dbFile);
 db.pragma('journal_mode = WAL');
 
 db.exec(`
@@ -44,7 +54,7 @@ db.exec(`
     PRIMARY KEY (circle_id, user_id)
   );
   -- Pictures attached to notes. Kept in the database itself so one file is still the whole
-  -- journal: backing up or moving azzifa.sqlite takes the pictures with it.
+  -- journal: backing up or moving djournl.sqlite takes the pictures with it.
   CREATE TABLE IF NOT EXISTS photos (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,

@@ -198,7 +198,7 @@ app.get('/api/export.txt', (req, res) => {
   const fmt = (d, timeZone) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone });
   const fmtDay = (day) => fmt(`${day}T00:00:00Z`, 'UTC'); // a calendar date, so no timezone shift
   const totalNotes = rows.reduce((n, r) => n + parseNotes(r).length, 0);
-  let out = `Azzifa — Catatan Refleksi\nDiekspor: ${fmtDay(req.today)}\nTotal catatan: ${totalNotes}\n\n`;
+  let out = `Djournl — Catatan Refleksi\nDiekspor: ${fmtDay(req.today)}\nTotal catatan: ${totalNotes}\n\n`;
   rows.forEach((r) => {
     out += `${fmtDay(r.date)} — Mood: ${r.mood}\n`;
     parseNotes(r).forEach((n) => {
@@ -211,7 +211,7 @@ app.get('/api/export.txt', (req, res) => {
     out += `Rangkuman kegiatan (${fmt(settings.summaryAt)}, ${settings.summaryRange} hari terakhir)\n${settings.summaryText}\n`;
   }
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="azzifa-riwayat.txt"');
+  res.setHeader('Content-Disposition', 'attachment; filename="djournl-riwayat.txt"');
   res.send(out);
 });
 
@@ -220,9 +220,9 @@ app.get('/api/export.txt', (req, res) => {
 // plus the pictures those notes hold (base64, so the backup is one self-contained file).
 app.get('/api/export.json', (req, res) => {
   const rows = db.prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY date ASC').all(req.user.id);
-  res.setHeader('Content-Disposition', `attachment; filename="azzifa-cadangan-${req.today}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="djournl-cadangan-${req.today}.json"`);
   res.json({
-    app: 'azzifa', version: 2, exportedAt: Date.now(),
+    app: 'djournl', version: 2, exportedAt: Date.now(),
     entries: rows.map(rowToEntry),
     photos: photos.exportFor(req.user.id, rows.flatMap(photoIdsOf)),
   });
@@ -333,7 +333,7 @@ app.post('/api/entries/:date/day-summary', auth.wrap(async (req, res) => {
 }));
 
 // ---------- Fallbacks ----------
-app.use('/api', (req, res) => res.status(404).json({ error: 'Alamat itu tidak ada di Azzifa.' }));
+app.use('/api', (req, res) => res.status(404).json({ error: 'Alamat itu tidak ada di Djournl.' }));
 
 // Every failure answers in JSON the page can show, in the app's own voice.
 // eslint-disable-next-line no-unused-vars
@@ -349,7 +349,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Azzifa berjalan di http://localhost:${PORT}`);
+  console.log(`Djournl berjalan di http://localhost:${PORT}`);
 });
 
 // A platform stops the app with SIGTERM on every deploy and restart; a terminal sends SIGINT,

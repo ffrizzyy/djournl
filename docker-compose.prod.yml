@@ -1,16 +1,16 @@
-# Your own server (VPS): Azzifa behind Caddy, which obtains and renews the HTTPS certificate by
+# Your own server (VPS): Djournl behind Caddy, which obtains and renews the HTTPS certificate by
 # itself. Needs DOMAIN in .env and the domain's DNS pointing at this server. See DEPLOY.md.
 #
 #   docker compose -f docker-compose.prod.yml up -d --build
 services:
-  azzifa:
+  djournl:
     build: .
     env_file:
       - .env
     environment:
       TRUST_PROXY: "1"   # Caddy is the one proxy in front
     volumes:
-      - azzifa-data:/app/data
+      - djournl-data:/app/data
     expose:
       - "3000"           # reachable by Caddy only, not published to the internet
     restart: unless-stopped
@@ -28,10 +28,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - azzifa
+      - djournl
     restart: unless-stopped
 
 volumes:
-  azzifa-data:
+  djournl-data:
   caddy-data:
   caddy-config:

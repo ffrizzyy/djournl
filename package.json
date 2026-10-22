@@ -1,8 +1,8 @@
 {
-  "name": "azzifa",
+  "name": "djournl",
   "version": "1.0.0",
   "private": true,
-  "description": "Azzifa — jurnal harian dengan mood tracker, dashboard, dan pengamatan pola mingguan.",
+  "description": "Djournl — jurnal harian dengan mood tracker, dashboard, dan pengamatan pola mingguan.",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
