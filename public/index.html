@@ -1617,7 +1617,7 @@ function renderProfile(){
         <span class="avatar" aria-hidden="true">${esc([...(me.name||'?')][0].toUpperCase())}</span>
         <div class="profile-id">
           <h2 class="section-h">${esc(me.name)}</h2>
-          <p class="profile-meta">${me.email ? `${esc(me.email)} · ` : ''}@${esc(me.username)}${me.createdAt ? ` · bergabung ${fmtDate(me.createdAt)}` : ''}</p>
+          <p class="profile-meta">${me.email ? esc(me.email) : `@${esc(me.username)}`}${me.createdAt ? ` · bergabung ${fmtDate(me.createdAt)}` : ''}</p>
         </div>
       </div>
       <div class="bento three">
