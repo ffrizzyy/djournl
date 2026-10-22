@@ -37,7 +37,7 @@ test('the sign-in screen is told a code is needed', async () => {
 });
 
 test('registration needs the right code, even for the first account', async () => {
-  const account = { username: 'rina', name: 'Rina', password: 'rahasia-rina-1' };
+  const account = { email: 'rina@example.test', username: 'rina', name: 'Rina', password: 'rahasia-rina-1' };
   assert.equal((await post('/api/auth/register', account)).status, 403);
   assert.equal((await post('/api/auth/register', { ...account, code: 'salah' })).status, 403);
   assert.equal((await post('/api/auth/register', { ...account, code: 'teman-dekat' })).status, 200);
@@ -54,8 +54,8 @@ test('behind a proxy, HTTPS visitors get a Secure cookie and HSTS', async () => 
 
 test('guessing the code is cut off', async () => {
   let last;
-  for (let i = 0; i < 11; i++) last = await post('/api/auth/register', { username: `tamu${i}`, password: 'rahasia-tamu-1', code: `tebak-${i}` }, { 'X-Forwarded-For': '203.0.113.9' });
+  for (let i = 0; i < 11; i++) last = await post('/api/auth/register', { email: `tamu${i}@example.test`, username: `tamu${i}`, password: 'rahasia-tamu-1', code: `tebak-${i}` }, { 'X-Forwarded-For': '203.0.113.9' });
   assert.equal(last.status, 429);
   // A different visitor is not caught in someone else's lockout.
-  assert.equal((await post('/api/auth/register', { username: 'sari', password: 'rahasia-sari-1', code: 'teman-dekat' }, { 'X-Forwarded-For': '203.0.113.10' })).status, 200);
+  assert.equal((await post('/api/auth/register', { email: 'sari@example.test', username: 'sari', password: 'rahasia-sari-1', code: 'teman-dekat' }, { 'X-Forwarded-For': '203.0.113.10' })).status, 200);
 });

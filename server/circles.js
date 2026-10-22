@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const db = require('./db');
+const { limiter } = require('./auth');
 const { shiftDay, utcDay } = require('./day');
 
 const MAX_MEMBERS = 20;
@@ -58,6 +59,8 @@ const circlesOf = (userId) => db.prepare(`
 const listFor = (req) => circlesOf(req.user.id).map((c) => circleView(c, req.user.id, req.today));
 const addMember = db.prepare('INSERT INTO circle_members (circle_id, user_id, joined_at, joined_day) VALUES (?, ?, ?, ?)');
 const tooMany = { error: `Kamu sudah ada di ${MAX_CIRCLES_PER_USER} grup. Itu batasnya untuk satu akun.` };
+// Invite codes are short enough to read aloud, so an account may not sit there guessing them.
+const joinGuesses = limiter(12, 60 * 60 * 1000);
 
 const router = express.Router();
 
@@ -77,9 +80,14 @@ router.post('/', (req, res) => {
 });
 
 router.post('/join', (req, res) => {
+  const key = String(req.user.id);
+  if (joinGuesses.blocked(key)) return res.status(429).json({ error: 'Terlalu banyak percobaan kode. Coba lagi sekitar satu jam lagi, ya.' });
   const code = String((req.body && req.body.code) || '').trim().toUpperCase();
   const circle = db.prepare('SELECT * FROM circles WHERE code = ?').get(code);
-  if (!circle) return res.status(404).json({ error: 'Kode undangannya belum ketemu. Coba cek lagi hurufnya, ya.' });
+  if (!circle) {
+    joinGuesses.hit(key);
+    return res.status(404).json({ error: 'Kode undangannya belum ketemu. Coba cek lagi hurufnya, ya.' });
+  }
   if (db.prepare('SELECT 1 FROM circle_members WHERE circle_id = ? AND user_id = ?').get(circle.id, req.user.id)) {
     return res.status(409).json({ error: 'Kamu sudah ada di grup ini.' });
   }
@@ -88,6 +96,7 @@ router.post('/join', (req, res) => {
     return res.status(400).json({ error: 'Grup ini sudah penuh. Coba buat grup baru bareng temanmu.' });
   }
   addMember.run(circle.id, req.user.id, Date.now(), req.today);
+  joinGuesses.clear(key);
   res.json(listFor(req));
 });
 

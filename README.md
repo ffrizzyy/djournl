@@ -10,10 +10,16 @@ Jurnal harian dengan mood tracker (beberapa catatan per hari), dashboard tren mo
 - **Dashboard** — streak, grafik mood 7/30 hari, pengamatan AI mingguan, **kalender mood** per bulan (ketuk tanggal untuk membuka catatannya), dan **streak bareng**.
 - **Riwayat** — **pencarian**, saringan mood, **#tag** (tulis `#kerja` di catatan, otomatis jadi tag), **favorit** (bintang per catatan), rangkuman AI, ekspor `.txt`, cetak/PDF, serta **cadangan `.json`** yang bisa dipulihkan lagi.
 - **Tur fitur** — saat pertama kali masuk, tiap akun diajak keliling langkah demi langkah (sekitar 13 langkah, bisa dilewati) melewati semua fitur di keempat halaman. Langkah yang tidak relevan dilewati sendiri, misalnya penjelasan kotak tulis saat empat langkah Harian sudah selesai. Tur bisa dibuka lagi kapan saja dari halaman Profil.
-- **Profil** — satu halaman untuk profil dan pengaturan: nama panggilan, ganti kata sandi, pertanyaan pribadi, pengingat harian, tema, mode menulis, tur fitur, tombol keluar, dan hapus akun.
-- **Lupa kata sandi** — saat membuat akun, tiap orang memilih satu **pertanyaan pribadi** (atau menulis sendiri) beserta jawabannya. Di halaman masuk, "Lupa kata sandi?" meminta nama pengguna, lalu jawaban atas pertanyaan itu dan kata sandi baru. Huruf besar-kecil, spasi, dan tanda baca pada jawaban tidak berpengaruh.
+- **Profil** — satu halaman untuk profil dan pengaturan: nama panggilan, **email**, ganti kata sandi, pertanyaan pribadi, **verifikasi dua langkah (TOTP)**, pengingat harian, tema, mode menulis, tur fitur, tombol keluar, **keluar dari perangkat lain**, dan hapus akun.
+- **Lupa kata sandi** — saat membuat akun, tiap orang memilih satu **pertanyaan pribadi** (atau menulis sendiri) beserta jawabannya. Di halaman masuk, "Lupa kata sandi?" meminta email akun (akun lama bisa memakai nama pengguna), lalu jawaban atas pertanyaan itu dan kata sandi baru. Huruf besar-kecil, spasi, dan tanda baca pada jawaban tidak berpengaruh. Kalau verifikasi dua langkah aktif, mengatur ulang kata sandi tetap meminta kode authenticator atau kode pemulihan.
 - **Sapaan dan pertanyaan yang berganti** — sapaan berbeda untuk tiap bagian hari dan hari tertentu, 56 pertanyaan Check Up, dan enam susunan kata untuk tiap langkah Harian. Pilihannya tetap sepanjang satu hari dan berganti keesokan harinya.
 - **Akun** — satu server bisa dipakai beberapa orang. Tiap akun punya jurnal sendiri yang tidak bisa dibaca akun lain.
+
+### Email dan masuk
+
+Akun baru dibuat dengan **email + kata sandi**. Email disimpan dalam huruf kecil dan harus unik; nama pengguna internal dibuat otomatis dari bagian sebelum `@` (mis. `farrel`), jadi kamu tidak perlu memilih nama pengguna saat mendaftar. Masuk bisa memakai email itu, sedangkan akun lama tetap bisa memakai nama penggunanya.
+
+Email bisa diganti dari **Profil → Keamanan** dengan memasukkan kata sandi sekarang. Belum ada verifikasi email atau tautan reset lewat email karena Djournl tidak memakai layanan pengirim email; lupa kata sandi tetap memakai pertanyaan pribadi.
 
 ### Streak bareng
 
@@ -24,6 +30,16 @@ Dua orang atau lebih bisa menjaga streak bersama. Buat grup di Dashboard, bagika
 - Hari sebelum seseorang bergabung tidak dihitung untuk orang itu, dan streak baru mulai berjalan setelah grup punya minimal dua anggota.
 - Yang terlihat anggota lain hanya **nama panggilan** dan **sudah atau belum menulis hari ini**. Isi catatan dan mood tidak pernah dibagikan.
 - Pergantian hari mengikuti **tanggal lokal** tiap anggota (tengah malam di perangkatnya), sama seperti bagian aplikasi lainnya. Anggota di zona waktu yang sama berbagi batas hari yang sama; kalau zona waktunya berbeda, masing-masing dihitung menurut harinya sendiri.
+
+### Verifikasi dua langkah
+
+Verifikasi dua langkah bersifat opsional dan diaktifkan dari **Profil**. Setelah kata sandi dimasukkan, aplikasi menampilkan kunci yang bisa ditambahkan ke aplikasi authenticator apa pun (Google Authenticator, Authy, 1Password, dan sejenisnya), lalu meminta satu kode untuk memastikan pengaturannya benar.
+
+- Setelah aktif, masuk memakai kata sandi **dan** kode 6 angka yang berganti setiap 30 detik.
+- Saat aktivasi, aplikasi menampilkan **10 kode pemulihan sekali pakai**. Simpan di tempat aman: kode itu hanya ditampilkan sekali, dan masing-masing hanya bisa dipakai satu kali.
+- Kata sandi yang diatur ulang lewat pertanyaan pribadi tidak melewati verifikasi dua langkah; kode tetap diminta.
+- Kalau authenticator dan semua kode pemulihan hilang, pemilik server bisa menjalankan `npm run reset-password -- <email-atau-nama-pengguna>`. Perintah itu memberi kata sandi sementara sekaligus mematikan verifikasi dua langkah akun tersebut, jadi pemilik akun bisa masuk dan mengaktifkannya lagi.
+- Rahasia TOTP disimpan di database; kode pemulihan hanya disimpan sebagai hash SHA-256, sama seperti token sesi.
 
 ## Menjalankan lokal
 
@@ -96,11 +112,12 @@ Ada endpoint `GET /healthz` yang mengembalikan `{ok:true}` untuk health check pl
 - **Frontend** (`public/index.html`) — satu file HTML/CSS/JS vanilla, tidak ada build step. Bicara ke backend lewat `fetch()` biasa.
 - **Backend** (`server/index.js`) — Express, menyajikan file statis dari `public/` sekaligus REST API di `/api/*`.
 - **AI** (`server/ai.js`) — satu fungsi `generateText(prompt)` yang menyembunyikan provider mana yang sebenarnya dipanggil.
-- **Akun** (`server/auth.js`) — daftar, masuk, keluar. Kata sandi di-hash dengan scrypt + salt per akun; sesi berupa token acak di cookie `HttpOnly`, dan database hanya menyimpan hash SHA-256 dari token itu.
+- **Akun** (`server/auth.js`) — daftar, masuk, keluar. Email adalah identitas masuk; akun lama tetap bisa memakai nama pengguna, dan nama pengguna untuk akun baru dibuat otomatis dari email. Kata sandi di-hash dengan scrypt + salt per akun; sesi berupa token acak di cookie `HttpOnly`, dan database hanya menyimpan hash SHA-256 dari token itu. Masuk dengan verifikasi dua langkah memakai tiket sementara 5 menit sebelum sesi dibuat.
+- **Verifikasi dua langkah** (`server/twofactor.js`) — TOTP RFC 6238 (SHA-1, 6 angka, 30 detik) dan kode pemulihan sekali pakai, tanpa dependensi tambahan.
 - **Streak bareng** (`server/circles.js`) — grup, kode undangan, dan perhitungan streak grup.
 - **Tanggal** (`server/day.js`) — "hari ini" adalah tanggal lokal penulisnya, bukan jam server. Browser mengirimnya di header `X-Local-Date` pada setiap permintaan; server hanya menerimanya kalau selisihnya paling banyak satu hari dari tanggal UTC server (tidak ada zona waktu yang lebih jauh dari itu), selain itu server memakai tanggal UTC-nya sendiri.
-- **Keamanan dasar** — semua masukan catatan dibersihkan di server sebelum disimpan (tanggal harus nyata, mood harus dikenal, catatan hanya membawa field yang dipakai aplikasi), respons membawa `Content-Security-Policy`, `X-Content-Type-Options`, dan `Referrer-Policy`, dan semua error dijawab dalam JSON.
-- **Database** (`server/db.js`) — SQLite lewat `better-sqlite3`, satu file di `data/djournl.sqlite`. Skema di-migrasi otomatis: database dari versi satu-pengguna dibangun ulang dengan kolom `user_id`, dan seluruh catatan lamanya diwarisi oleh **akun pertama yang mendaftar**.
+- **Keamanan dasar** — semua masukan catatan dibersihkan di server sebelum disimpan (tanggal harus nyata, mood harus dikenal, catatan hanya membawa field yang dipakai aplikasi, teks maksimal 20.000 karakter per catatan), respons API memakai `Cache-Control: no-store` dan tidak bisa diubah dari situs lain (pemeriksaan `Origin`), respons halaman membawa `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, dan `Permissions-Policy`, dan semua error dijawab dalam JSON.
+- **Database** (`server/db.js`) — SQLite lewat `better-sqlite3`, satu file di `data/djournl.sqlite`. Skema di-migrasi otomatis: database dari versi satu-pengguna dibangun ulang dengan kolom `user_id`, kolom `email` ditambahkan ke database lama (akun lama tetap `NULL` sampai pemiliknya mengisi dari Profil), dan seluruh catatan lamanya diwarisi oleh **akun pertama yang mendaftar**.
 
 ```
 djournl-app/
@@ -111,6 +128,7 @@ djournl-app/
 ├── server/
 │   ├── index.js    # Express app + route jurnal, pengaturan, ekspor, AI
 │   ├── auth.js     # akun + sesi
+│   ├── twofactor.js # TOTP + kode pemulihan
 │   ├── circles.js  # streak bareng
 │   ├── photos.js   # foto di catatan
 │   ├── day.js      # tanggal lokal penulis
@@ -128,17 +146,25 @@ Semua route `/api/*` selain `/api/auth/*` butuh sesi masuk (cookie) dan hanya me
 
 | Method | Path | Fungsi |
 |---|---|---|
-| GET | `/api/auth/config` | `{signup, firstAccount}` — apakah pendaftaran dibuka, dan apakah server ini belum punya akun |
-| POST | `/api/auth/register` | Buat akun `{username, name, password}` lalu langsung masuk |
-| POST | `/api/auth/login` | Masuk `{username, password}`. 8 kali gagal = terkunci 10 menit |
-| GET | `/api/auth/question?username=` | Pertanyaan pribadi milik nama pengguna itu. Nama yang tidak dikenal tetap mendapat sebuah pertanyaan, supaya tidak ketahuan akun mana yang ada |
-| POST | `/api/auth/reset` | Lupa kata sandi: `{username, answer, password}`. Semua sesi lama dihapus. Paling banyak 5 percobaan per jam |
-| POST | `/api/auth/logout` | Keluar; sesi dihapus di server |
-| GET | `/api/me` | Akun yang sedang masuk: `{id, username, name, createdAt}` |
+| GET | `/api/auth/config` | `{signup, firstAccount, needsCode}` — apakah pendaftaran dibuka, apakah server ini belum punya akun, dan apakah perlu kode pendaftaran |
+| POST | `/api/auth/register` | Buat akun `{email, name?, password, question?, answer?, code?}` lalu langsung masuk. Nama pengguna dibuat otomatis dari email; `username` masih diterima kalau ingin menentukan sendiri |
+| POST | `/api/auth/login` | Masuk dengan `{email, password}` atau `{username, password}` untuk akun lama; `{identifier, password}` juga diterima. 8 kali gagal = terkunci 10 menit. Kalau 2FA aktif, jawabannya `{twoFactor:true}` dan belum ada sesi |
+| POST | `/api/auth/2fa` | Langkah kedua masuk: `{code}` berisi 6 angka authenticator atau satu kode pemulihan. Butuh tiket 5 menit dari langkah pertama |
+| GET | `/api/auth/question?identifier=` | Pertanyaan pribadi milik email (atau nama pengguna lama) itu. Nama yang tidak dikenal tetap mendapat sebuah pertanyaan, supaya tidak ketahuan akun mana yang ada. `?email=` dan `?username=` juga diterima |
+| POST | `/api/auth/reset` | Lupa kata sandi: `{identifier, answer, password}` dengan email atau nama pengguna lama. Semua sesi lama dihapus. Paling banyak 5 percobaan per jam. Kalau 2FA aktif, langkah kedua tetap diminta |
+| POST | `/api/auth/logout` | Keluar; sesi dan tiket 2FA dihapus di server |
+| GET | `/api/me` | Akun yang sedang masuk: `{id, username, email, name, createdAt, question, twoFactor, recoveryCodesLeft}` |
 | PATCH | `/api/account/profile` | Ganti nama panggilan `{name}` |
+| POST | `/api/account/email` | Atur atau ganti email `{email, password}`; email harus unik dan kata sandi sekarang wajib benar |
 | POST | `/api/account/password` | Ganti kata sandi `{current, next}`. Sesi di perangkat lain dihapus |
 | POST | `/api/account/question` | Atur atau ganti pertanyaan pribadi `{question, answer, password}` |
-| DELETE | `/api/account` | Hapus akun `{password}` beserta catatan, foto, pengaturan, dan keanggotaan grupnya |
+| GET | `/api/account/security` | `{twoFactor, recoveryCodesLeft}` untuk halaman Profil |
+| POST | `/api/account/2fa/setup` | Mulai pengaturan 2FA `{password}`; jawabannya `{secret, uri}` untuk aplikasi authenticator |
+| POST | `/api/account/2fa/enable` | Konfirmasi dengan `{code}` dan dapatkan 10 kode pemulihan sekali tampil |
+| POST | `/api/account/2fa/disable` | Matikan 2FA `{password, code}`; kode boleh dari authenticator atau kode pemulihan |
+| POST | `/api/account/2fa/recovery-codes` | Buat 10 kode pemulihan baru `{password, code}`; kode lama langsung tidak berlaku |
+| DELETE | `/api/account/sessions` | Keluar dari semua perangkat lain, sesi perangkat ini tetap hidup |
+| DELETE | `/api/account` | Hapus akun `{password}` beserta catatan, foto, pengaturan, keanggotaan grup, dan data 2FA-nya |
 | GET | `/api/circles` | Grup streak yang kamu ikuti: streak, anggota, siapa yang sudah menulis hari ini |
 | POST | `/api/circles` | Buat grup `{name}` |
 | POST | `/api/circles/join` | Gabung dengan kode undangan `{code}` |
@@ -147,8 +173,8 @@ Semua route `/api/*` selain `/api/auth/*` butuh sesi masuk (cookie) dan hanya me
 | GET | `/api/photos/:id` | Ambil foto. Hanya pemiliknya yang bisa; untuk akun lain jawabannya `404` |
 | GET | `/api/entries` | Ambil 2000 hari terbaru, masing-masing dengan array `notes` |
 | GET | `/api/export.json` | Unduh cadangan lengkap (catatan, favorit, rangkuman harian) |
-| POST | `/api/import` | Pulihkan cadangan `{entries:[...]}`. Tanggal yang sama ditimpa, tanggal lain dibiarkan |
-| PUT | `/api/entries/:date` | Simpan seluruh catatan tanggal tsb (`{mood, notes, daySummary}`). `400` kalau tanggalnya tidak nyata atau tidak ada catatan berisi teks |
+| POST | `/api/import` | Pulihkan cadangan `{entries:[...], photos:[...]}`. Tanggal yang sama ditimpa, tanggal lain dibiarkan; foto tetap dibatasi kuota album |
+| PUT | `/api/entries/:date` | Simpan seluruh catatan tanggal tsb (`{mood, notes, daySummary}`). `400` kalau tanggalnya tidak nyata atau tidak ada catatan berisi teks. Teks per catatan dipotong di 20.000 karakter |
 | DELETE | `/api/entries/:date` | Hapus seluruh catatan tanggal tsb |
 | GET | `/api/settings` | Pengaturan pengingat, cache pengamatan/rangkuman, dan `ai: {configured, label}` |
 | PUT | `/api/settings` | Perbarui `reminderEnabled`, `reminderTime`, `summaryRange`, `dayMode`, `tourDone`. Kunci lain diabaikan |
@@ -156,13 +182,15 @@ Semua route `/api/*` selain `/api/auth/*` butuh sesi masuk (cookie) dan hanya me
 | POST | `/api/insight` | Pengamatan pola mingguan dari 14 catatan terakhir (butuh AI provider terkonfigurasi) |
 | POST | `/api/summary` | Rangkuman kegiatan `{range: 7\|30}` hari terakhir (butuh AI provider terkonfigurasi) |
 | POST | `/api/entries/:date/day-summary` | Rangkuman satu hari itu saja (mode "Harian"), tersimpan di baris entri itu sendiri (butuh AI provider terkonfigurasi) |
-| GET | `/healthz` | `{ok:true}` — untuk health check |
+| GET | `/healthz` | `{ok:true}` kalau database bisa dibaca, `503` kalau tidak — untuk health check |
 
 Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `{prompt, text, at, fav?, photos?}`; `fav` menandai favorit, `photos` berisi id foto, dan tag tidak disimpan terpisah melainkan dibaca dari `#kata` di dalam `text`). Baris yang dibuat sebelum kolom ini ada tetap terbaca sebagai satu catatan, dari kolom `prompt`/`text` lama — tidak ada migrasi manual yang perlu dijalankan.
 
 ## Catatan jujur soal keterbatasan
 
-- **Lupa kata sandi bergantung pada pertanyaan pribadi.** Tidak ada email di sistem ini. Jawaban pertanyaan pribadi lebih mudah ditebak orang yang mengenalmu daripada kata sandi, jadi percobaannya dibatasi ketat (5 per jam), dan sebaiknya pilih pertanyaan yang jawabannya benar-benar hanya kamu yang tahu. Yang lupa kata sandi **dan** jawabannya bisa dibantu pemilik server dengan `npm run reset-password -- <nama-pengguna>`, yang mencetak kata sandi sementara. Akun yang dibuat sebelum fitur ini ada belum punya pertanyaan; atur dari halaman Profil.
+- **Lupa kata sandi bergantung pada pertanyaan pribadi.** Email memang dipakai untuk masuk, tetapi Djournl belum mengirim email: tidak ada verifikasi alamat dan tidak ada tautan reset lewat email. Jawaban pertanyaan pribadi lebih mudah ditebak orang yang mengenalmu daripada kata sandi, jadi percobaannya dibatasi ketat (5 per jam), dan sebaiknya pilih pertanyaan yang jawabannya benar-benar hanya kamu yang tahu. Yang lupa kata sandi **dan** jawabannya bisa dibantu pemilik server dengan `npm run reset-password -- <email-atau-nama-pengguna>`, yang mencetak kata sandi sementara. Akun yang dibuat sebelum fitur ini ada belum punya pertanyaan atau email; atur keduanya dari halaman Profil.
+- **Email belum diverifikasi.** Siapa pun bisa mendaftar dengan alamat yang bukan miliknya selama alamat itu belum dipakai akun lain. Email di sini adalah identitas masuk, bukan kanal pemulihan; jangan mengandalkannya untuk membuktikan pemilik akun.
+- **Verifikasi dua langkah bisa mengunci diri sendiri kalau kuncinya hilang.** Kode pemulihan hanya ditampilkan sekali saat aktivasi; simpan sebelum menutup halaman. Kalau authenticator dan semua kode pemulihan hilang, pemilik server harus menjalankan `npm run reset-password -- <email-atau-nama-pengguna>`, yang juga mematikan 2FA untuk akun itu. Tidak ada email pemulihan otomatis.
 - **Hapus akun bersifat permanen.** Tidak ada masa tunggu atau tempat sampah. Cadangkan dulu lewat Riwayat kalau catatannya masih diinginkan.
 - **Pendaftaran terbuka secara default.** Siapa pun yang tahu alamat server bisa membuat akun (jurnal tiap akun tetap terpisah). Set `ALLOW_SIGNUP=false` setelah semua orang yang kamu ajak sudah mendaftar.
 - **Pakai HTTPS kalau di-deploy.** Kata sandi dikirim saat masuk; tanpa HTTPS ia lewat jaringan tanpa enkripsi. Di balik reverse proxy HTTPS, cookie sesi otomatis diberi tanda `Secure`.
@@ -179,8 +207,8 @@ Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `
 
 ## Pengujian
 
-`npm test` menjalankan server sungguhan dengan database sementara dan mengujinya lewat HTTP: akun dan sesi, isolasi jurnal antar akun, validasi catatan, tanggal lokal, cadangan dan pemulihan, aturan streak grup, foto (unggah, privasi antar akun, pembersihan, cadangan), jawaban saat AI belum diaktifkan, dan header keamanan.
+`npm test` menjalankan server sungguhan dengan database sementara dan mengujinya lewat HTTP: akun dan sesi, **pendaftaran dan masuk dengan email**, nama pengguna otomatis yang unik, **mengganti email dari Profil**, isolasi jurnal antar akun, validasi catatan, tanggal lokal, cadangan dan pemulihan, aturan streak grup, foto (unggah, privasi antar akun, pembersihan, cadangan), jawaban saat AI belum diaktifkan, header keamanan, **2FA (setup, masuk, kode pemulihan sekali pakai, matikan)**, **reset kata sandi yang tetap meminta 2FA**, **keluar dari perangkat lain**, **penolakan permintaan lintas situs**, dan **batas panjang catatan**.
 
-Di luar itu, halaman sudah dijalankan di Chrome headless (ponsel dan desktop, terang dan gelap) untuk memeriksa alur daftar/masuk, ketiga tab, pemulihan draf, perubahan mood, foto dan kamera (dengan perangkat kamera simulasi), seluruh langkah tur fitur, tanggal di beberapa zona waktu, dan bahwa tidak ada pelanggaran Content-Security-Policy.
+Di luar itu, halaman utama sudah dijalankan di Chrome headless (ponsel dan desktop, terang dan gelap) untuk memeriksa alur daftar/masuk, ketiga tab, pemulihan draf, perubahan mood, foto dan kamera (dengan perangkat kamera simulasi), seluruh langkah tur fitur, tanggal di beberapa zona waktu, dan bahwa tidak ada pelanggaran Content-Security-Policy. UI 2FA yang baru diuji lewat HTTP end-to-end; pemeriksaan visual terakhirnya dilakukan saat deploy.
 
 Yang **belum** diuji: fitur AI dengan kunci API sungguhan, input suara, notifikasi pengingat, kamera di perangkat sungguhan, dan deploy lewat Docker.

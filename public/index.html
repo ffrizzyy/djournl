@@ -337,6 +337,20 @@
   .inline-form .chip{height:46px; padding:0 18px;}
   .auth .save{margin-top:22px;}
   .auth .summary-err{margin:14px 0 0;}
+  /* A small "Tampilkan" button sits inside password fields; render() adds it to every one. */
+  .pw-wrap{position:relative; display:block;}
+  .field .pw-wrap{margin:0; color:inherit; font-size:inherit; font-weight:inherit;}
+  .pw-wrap input{padding-right:104px;}
+  .pw-toggle{position:absolute; top:50%; right:8px; transform:translateY(-50%); border:none; background:transparent; color:var(--ink-soft); font:600 11.5px 'Plus Jakarta Sans',sans-serif; padding:8px 10px; border-radius:var(--r-pill); cursor:pointer;}
+  .pw-toggle:hover{color:var(--clay);}
+  /* Two-factor setup: the manual key and the one-time recovery codes. */
+  .secret-box{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 4px; padding:12px 14px; border-radius:16px; background:var(--well); box-shadow:inset 0 0 0 1px var(--line);}
+  .secret-box code{flex:1; min-width:0; overflow-wrap:anywhere; font:700 14px ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.08em;}
+  .secret-box .btn-ghost-sm{margin-top:0;}
+  .recovery-codes{margin:12px 0 4px; padding:16px; border-radius:16px; background:var(--well); box-shadow:inset 0 0 0 1px var(--line); font:600 13px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.06em; white-space:pre-wrap; color:var(--ink);}
+  .badge-ok{display:inline-block; margin-left:6px; padding:2px 8px; border-radius:var(--r-pill); background:var(--rose-soft); color:var(--clay); font-size:10.5px; font-weight:800; letter-spacing:.04em; vertical-align:1px;}
+  .setting-actions{display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; flex-shrink:0;}
+  .setting-actions .btn-ghost-sm{margin-top:0;}
 
   /* ---- Circles: streak together ---- */
   .circle-strip:not(:empty){margin-bottom:16px;}
@@ -685,8 +699,8 @@ let draftPhotos = [];        // ids of pictures already uploaded for the note be
 let stashedPhotos = null;    // the new note's pictures, set aside while an older note is being edited
 let photoBusy = 0;           // uploads in flight
 let tourOn = false, tourIdx = 0;
-let resetQuestion = null;    // step 2 of "forgot password": {username, question} once the name is known
-let questionAsk = false, deleteAsk = false;   // the two in-page forms on Profil that open on request
+let resetQuestion = null;    // step 2 of "forgot password": {identifier, question} once the account is known
+let questionAsk = false, emailAsk = false, deleteAsk = false;   // the in-page forms on Profil that open on request
 let tourDone = true;         // from the server; false starts the tour on this account's first visit
 let promptSynced = false;
 let dayMode = 'daily';      // Harian opens first; Check Up is one tap away
@@ -710,6 +724,8 @@ let histQuery = '', histMood = null, histTag = null, histFav = false, histDate =
 let importPending = null, importBusy = false;
 let me = null;               // the signed-in account; null shows the sign-in screen
 let authMode = 'login', authBusy = false, authCfg = {signup:true, firstAccount:false, needsCode:false};
+let twoFactorPending = false, twoFactorUsername = '';   // sign-in is waiting for the second step
+let twoFactorAsk = null, twoFactorSetup = null, twoFactorCodes = null, twoFactorBusy = false;
 let circles = [], leaveConfirmId = null;
 // ---------- Storage backend: real Express + SQLite API ----------
 // Every server call goes through here: a 401 in the middle of a session (expired, or signed out
@@ -922,6 +938,30 @@ function pickPrompt(notes){
 }
 function syncPromptOnce(){ if(promptSynced) return; promptSynced=true; promptIdx=pickPrompt(); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 3200); }
+// Every password field gets a "Tampilkan" control without repeating markup in every form.
+function addPasswordToggles(){
+  document.querySelectorAll('#app input[type="password"]').forEach(input=>{
+    if(input.dataset.pwToggle) return;
+    input.dataset.pwToggle='1';
+    const wrap=document.createElement('span'); wrap.className='pw-wrap';
+    input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='pw-toggle'; btn.textContent='Tampilkan';
+    btn.setAttribute('aria-label','Tampilkan kata sandi');
+    btn.addEventListener('click', ()=>{
+      const show = input.type==='password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Sembunyikan' : 'Tampilkan';
+      btn.setAttribute('aria-label', show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi');
+      input.focus();
+    });
+    wrap.appendChild(btn);
+  });
+}
+function copyText(text, message='Disalin'){
+  if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>showToast(message), ()=>showToast('Salin manual: '+text));
+  else showToast('Salin manual: '+text);
+}
 function getTheme(){ return document.documentElement.getAttribute('data-theme')==='dark' ? 'dark' : 'light'; }
 function setTheme(next){ if(getTheme()!==next) toggleTheme(); }
 function toggleTheme(){
@@ -1378,6 +1418,24 @@ async function saveName(ev){
     if(circles.length) loadCircles();   // friends see the new name there
   }catch(e){ formError('nameErr', OFFLINE_NOTE); }
 }
+function askEmail(on){
+  emailAsk = on; render();
+  if(on) document.getElementById('profEmail')?.focus();
+}
+async function saveEmail(ev){
+  ev.preventDefault();
+  document.getElementById('emailErr').hidden = true;
+  try{
+    const res = await api('/api/account/email', JSON_POST({
+      email: document.getElementById('profEmail').value.trim(),
+      password: document.getElementById('profEmailPass').value,
+    }));
+    const data = await res.json();
+    if(!res.ok){ formError('emailErr', data.error || 'Emailnya belum tersimpan. Coba lagi sebentar lagi, ya.'); return; }
+    emailAsk = false; me = {...me, email:data.email};
+    render(); showToast('Email akunmu sudah tersimpan.');
+  }catch(e){ formError('emailErr', OFFLINE_NOTE); }
+}
 async function savePassword(ev){
   ev.preventDefault();
   document.getElementById('pwErr').hidden = true;
@@ -1414,6 +1472,141 @@ async function deleteAccount(ev){
     showToast('Akunmu sudah dihapus. Terima kasih sudah pernah bercerita di sini.');
   }catch(e){ formError('delErr', OFFLINE_NOTE); }
 }
+// ---------- Two-factor setup and recovery ----------
+function openTwoFactor(ask){
+  twoFactorAsk = ask; twoFactorSetup = null; twoFactorCodes = null; render();
+  const focusId = ask==='setup' ? 'tfPass' : ask==='disable' ? 'tfDisablePass' : ask==='regen' ? 'tfRegenPass' : null;
+  if(focusId) document.getElementById(focusId)?.focus();
+}
+function cancelTwoFactor(){ twoFactorAsk=null; twoFactorSetup=null; twoFactorCodes=null; render(); }
+function finishTwoFactorCodes(){ twoFactorCodes=null; twoFactorAsk=null; render(); }
+function copyRecoveryCodes(){ if(twoFactorCodes) copyText(twoFactorCodes.join('\n'), 'Kode pemulihan disalin.'); }
+async function startTwoFactor(ev){
+  ev.preventDefault();
+  if(twoFactorBusy) return;
+  const err = document.getElementById('tfErr'); err.hidden = true;
+  twoFactorBusy = true;
+  try{
+    const res = await api('/api/account/2fa/setup', JSON_POST({password:document.getElementById('tfPass').value}));
+    const data = await res.json();
+    if(!res.ok){ formError('tfErr', data.error || 'Pengaturannya belum bisa dimulai. Coba lagi sebentar lagi, ya.'); return; }
+    twoFactorSetup = data; twoFactorAsk = 'confirm'; render();
+    document.getElementById('tfCode')?.focus();
+  }catch(e){ formError('tfErr', OFFLINE_NOTE); }
+  finally{ twoFactorBusy = false; }
+}
+async function confirmTwoFactor(ev){
+  ev.preventDefault();
+  if(twoFactorBusy) return;
+  const err = document.getElementById('tfErr'); err.hidden = true;
+  twoFactorBusy = true;
+  try{
+    const res = await api('/api/account/2fa/enable', JSON_POST({code:document.getElementById('tfCode').value}));
+    const data = await res.json();
+    if(!res.ok){ formError('tfErr', data.error || 'Kodenya belum bisa diverifikasi. Coba lagi, ya.'); return; }
+    twoFactorCodes = data.recoveryCodes; twoFactorSetup = null; twoFactorAsk = 'codes';
+    me = {...me, twoFactor:1, recoveryCodesLeft:data.recoveryCodes.length};
+    render();
+    showToast('Verifikasi dua langkah sudah aktif. Simpan kode pemulihannya, ya.');
+  }catch(e){ formError('tfErr', OFFLINE_NOTE); }
+  finally{ twoFactorBusy = false; }
+}
+async function disableTwoFactor(ev){
+  ev.preventDefault();
+  if(twoFactorBusy) return;
+  const err = document.getElementById('tfErr'); err.hidden = true;
+  twoFactorBusy = true;
+  try{
+    const res = await api('/api/account/2fa/disable', JSON_POST({
+      password:document.getElementById('tfDisablePass').value,
+      code:document.getElementById('tfDisableCode').value,
+    }));
+    const data = await res.json();
+    if(!res.ok){ formError('tfErr', data.error || 'Belum berhasil dimatikan. Coba lagi sebentar lagi, ya.'); return; }
+    twoFactorAsk = null; me = {...me, twoFactor:0, recoveryCodesLeft:0};
+    render(); showToast('Verifikasi dua langkah sudah dimatikan.');
+  }catch(e){ formError('tfErr', OFFLINE_NOTE); }
+  finally{ twoFactorBusy = false; }
+}
+async function regenerateTwoFactor(ev){
+  ev.preventDefault();
+  if(twoFactorBusy) return;
+  const err = document.getElementById('tfErr'); err.hidden = true;
+  twoFactorBusy = true;
+  try{
+    const res = await api('/api/account/2fa/recovery-codes', JSON_POST({
+      password:document.getElementById('tfRegenPass').value,
+      code:document.getElementById('tfRegenCode').value,
+    }));
+    const data = await res.json();
+    if(!res.ok){ formError('tfErr', data.error || 'Kode barunya belum bisa dibuat. Coba lagi sebentar lagi, ya.'); return; }
+    twoFactorCodes = data.recoveryCodes; twoFactorAsk = 'codes';
+    me = {...me, twoFactor:1, recoveryCodesLeft:data.recoveryCodes.length};
+    render(); showToast('Kode pemulihan baru sudah dibuat. Kode lama tidak berlaku lagi.');
+  }catch(e){ formError('tfErr', OFFLINE_NOTE); }
+  finally{ twoFactorBusy = false; }
+}
+async function revokeOtherSessions(){
+  try{
+    const res = await api('/api/account/sessions', {method:'DELETE'});
+    const data = await res.json();
+    if(!res.ok){ showToast(data.error || 'Belum berhasil mengeluarkan perangkat lain.'); return; }
+    showToast(data.revoked ? `${data.revoked} perangkat lain sudah dikeluarkan.` : 'Tidak ada perangkat lain yang sedang masuk.');
+  }catch(e){ showToast(OFFLINE_NOTE); }
+}
+function renderTwoFactor(){
+  if(twoFactorCodes) return `
+    <div class="setting" style="border-top:0;padding-top:0">
+      <div><div class="setting-title">Kode pemulihan</div><div class="setting-hint">Simpan di tempat aman. Kode ini hanya ditampilkan sekali dan masing-masing bisa dipakai satu kali.</div></div>
+    </div>
+    <pre class="recovery-codes">${twoFactorCodes.map(esc).join('\n')}</pre>
+    <div class="confirm-row">
+      <button class="btn-ghost-sm" type="button" onclick="copyRecoveryCodes()">Salin semua</button>
+      <button class="btn-ghost-sm" type="button" onclick="finishTwoFactorCodes()">Saya sudah menyimpan</button>
+    </div>`;
+  if(twoFactorAsk==='setup') return `
+    <form class="confirm-form" onsubmit="startTwoFactor(event)">
+      <p class="summary-hint" style="margin-top:0">Masukkan kata sandi sekarang untuk memulai. Setelah itu kamu akan melihat kunci untuk aplikasi authenticator.</p>
+      <label class="field"><span>Kata sandi sekarang</span><input id="tfPass" type="password" autocomplete="current-password" required></label>
+      <p class="summary-err" id="tfErr" role="alert" hidden></p>
+      <div class="confirm-row"><button class="btn-ghost-sm" type="submit">Lanjut</button><button class="btn-ghost-sm" type="button" onclick="cancelTwoFactor()">Batal</button></div>
+    </form>`;
+  if(twoFactorAsk==='confirm' && twoFactorSetup) return `
+    <div class="setting" style="border-top:0;padding-top:0"><div><div class="setting-title">Hubungkan aplikasi authenticator</div><div class="setting-hint">Tambahkan kunci ini secara manual, atau buka tautannya di ponsel. Kodenya berganti setiap 30 detik.</div></div></div>
+    <div class="secret-box"><code>${esc(twoFactorSetup.secret)}</code><button class="btn-ghost-sm" type="button" onclick="copyText('${twoFactorSetup.secret}', 'Kunci authenticator disalin.')">Salin</button></div>
+    <a class="btn-ghost-sm" href="${escAttr(twoFactorSetup.uri)}">Buka di aplikasi authenticator</a>
+    <form class="confirm-form" onsubmit="confirmTwoFactor(event)">
+      <label class="field"><span>Kode 6 angka</span><input id="tfCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+      <p class="summary-err" id="tfErr" role="alert" hidden></p>
+      <div class="confirm-row"><button class="btn-ghost-sm" type="submit">Aktifkan</button><button class="btn-ghost-sm" type="button" onclick="cancelTwoFactor()">Batal</button></div>
+    </form>`;
+  if(twoFactorAsk==='disable') return `
+    <form class="confirm-form" onsubmit="disableTwoFactor(event)">
+      <p class="summary-hint" style="margin-top:0"><b>Matikan verifikasi dua langkah?</b> Akunmu akan kembali hanya memakai kata sandi.</p>
+      <label class="field"><span>Kata sandi sekarang</span><input id="tfDisablePass" type="password" autocomplete="current-password" required></label>
+      <label class="field"><span>Kode authenticator atau pemulihan</span><input id="tfDisableCode" autocomplete="one-time-code" required></label>
+      <p class="summary-err" id="tfErr" role="alert" hidden></p>
+      <div class="confirm-row"><button class="btn-ghost-sm danger" type="submit">Matikan</button><button class="btn-ghost-sm" type="button" onclick="cancelTwoFactor()">Batal</button></div>
+    </form>`;
+  if(twoFactorAsk==='regen') return `
+    <form class="confirm-form" onsubmit="regenerateTwoFactor(event)">
+      <p class="summary-hint" style="margin-top:0">Buat sepuluh kode pemulihan baru. Semua kode lama langsung tidak berlaku.</p>
+      <label class="field"><span>Kata sandi sekarang</span><input id="tfRegenPass" type="password" autocomplete="current-password" required></label>
+      <label class="field"><span>Kode authenticator atau pemulihan</span><input id="tfRegenCode" autocomplete="one-time-code" required></label>
+      <p class="summary-err" id="tfErr" role="alert" hidden></p>
+      <div class="confirm-row"><button class="btn-ghost-sm" type="submit">Buat kode baru</button><button class="btn-ghost-sm" type="button" onclick="cancelTwoFactor()">Batal</button></div>
+    </form>`;
+  if(me && me.twoFactor) return `
+    <div class="setting">
+      <div><div class="setting-title">Verifikasi dua langkah<span class="badge-ok">Aktif</span></div><div class="setting-hint">${me.recoveryCodesLeft||0} kode pemulihan tersisa. Kode authenticator diminta setiap kali masuk.</div></div>
+      <div class="setting-actions"><button class="btn-ghost-sm" onclick="openTwoFactor('regen')">Kode baru</button><button class="btn-ghost-sm danger" onclick="openTwoFactor('disable')">Matikan</button></div>
+    </div>`;
+  return `
+    <div class="setting">
+      <div><div class="setting-title">Verifikasi dua langkah</div><div class="setting-hint">Minta kode dari aplikasi authenticator saat masuk, jadi kata sandi saja tidak cukup.</div></div>
+      <button class="btn-ghost-sm" onclick="openTwoFactor('setup')">Aktifkan</button>
+    </div>`;
+}
 function renderProfile(){
   const days = new Set(entries.map(e=>e.date)).size;
   const dark = getTheme()==='dark';
@@ -1424,7 +1617,7 @@ function renderProfile(){
         <span class="avatar" aria-hidden="true">${esc([...(me.name||'?')][0].toUpperCase())}</span>
         <div class="profile-id">
           <h2 class="section-h">${esc(me.name)}</h2>
-          <p class="profile-meta">@${esc(me.username)}${me.createdAt ? ` · bergabung ${fmtDate(me.createdAt)}` : ''}</p>
+          <p class="profile-meta">${me.email ? `${esc(me.email)} · ` : ''}@${esc(me.username)}${me.createdAt ? ` · bergabung ${fmtDate(me.createdAt)}` : ''}</p>
         </div>
       </div>
       <div class="bento three">
@@ -1441,8 +1634,19 @@ function renderProfile(){
     </section>
     <section class="card pw-card">
       <h2 class="section-h">Keamanan</h2>
+      <div class="setting" style="border-top:0;padding-top:0">
+        <div><div class="setting-title">Email</div><div class="setting-hint">${me.email ? esc(me.email) : 'Belum ada. Tambahkan supaya kamu bisa masuk dengan email.'}</div></div>
+        ${emailAsk ? '' : `<button class="btn-ghost-sm" onclick="askEmail(true)">${me.email ? 'Ganti' : 'Atur'}</button>`}
+      </div>
+      ${emailAsk ? `<form class="confirm-form" onsubmit="saveEmail(event)">
+        <label class="field"><span>Email</span><input id="profEmail" type="email" autocomplete="email" required maxlength="254" value="${escAttr(me.email || '')}" placeholder="nama@email.com"></label>
+        <label class="field"><span>Kata sandi sekarang</span><input id="profEmailPass" type="password" autocomplete="current-password" required></label>
+        <p class="field-hint">Email dipakai untuk masuk. Belum ada verifikasi email, jadi pastikan alamatnya benar.</p>
+        <p class="summary-err" id="emailErr" role="alert" hidden></p>
+        <div class="confirm-row"><button class="btn-ghost-sm" type="submit">Simpan email</button><button class="btn-ghost-sm" type="button" onclick="askEmail(false)">Batal</button></div>
+      </form>` : ''}
       <form onsubmit="savePassword(event)">
-        <input type="text" autocomplete="username" value="${escAttr(me.username)}" hidden>
+        <input type="text" autocomplete="username" value="${escAttr(me.email || me.username)}" hidden>
         <label class="field" style="margin-top:0"><span>Kata sandi sekarang</span><input id="pwCurrent" type="password" autocomplete="current-password" required></label>
         <label class="field"><span>Kata sandi baru</span><input id="pwNext" type="password" autocomplete="new-password" required minlength="8"></label>
         <p class="field-hint">Minimal 8 karakter. Perangkat lain yang masih masuk dengan kata sandi lama akan dikeluarkan.</p>
@@ -1460,6 +1664,7 @@ function renderProfile(){
         <p class="summary-err" id="profQErr" role="alert" hidden></p>
         <div class="confirm-row"><button class="btn-ghost-sm" type="submit">Simpan pertanyaan</button><button class="btn-ghost-sm" type="button" onclick="askQuestion(false)">Batal</button></div>
       </form>` : ''}
+      ${renderTwoFactor()}
     </section>
     </div>
     <div class="col col-side">
@@ -1495,8 +1700,9 @@ function renderProfile(){
     </section>
     <section class="card account-card">
       <h2 class="section-h">Akun</h2>
-      <p class="summary-hint">Kamu masuk sebagai <b>@${esc(me.username)}</b>. Catatanmu tetap tersimpan dan menunggu saat kamu kembali.</p>
+      <p class="summary-hint">Kamu masuk sebagai <b>${me.email ? esc(me.email) : `@${esc(me.username)}`}</b>. Catatanmu tetap tersimpan dan menunggu saat kamu kembali.</p>
       <button class="btn-soft danger" onclick="logout()">Keluar</button>
+      <div class="confirm-row"><button class="btn-ghost-sm quiet" onclick="revokeOtherSessions()">Keluar dari perangkat lain</button></div>
       ${deleteAsk ? `<form class="confirm-form" onsubmit="deleteAccount(event)">
         <p class="summary-hint" style="margin:18px 0 0;"><b>Menghapus akun tidak bisa dibatalkan.</b> Semua catatan, foto, dan keanggotaan grupmu ikut terhapus. Kalau masih ingin menyimpannya, cadangkan dulu dari halaman Riwayat.</p>
         <label class="field"><span>Kata sandi</span><input id="delPass" type="password" autocomplete="current-password" required></label>
@@ -1601,7 +1807,7 @@ function renderToday(){
 }
 function setTab(t){
   syncDraft(); tab=t;
-  if(t!=='profile'){ questionAsk=false; deleteAsk=false; }
+  if(t!=='profile'){ questionAsk=false; emailAsk=false; deleteAsk=false; }
   if(t!=='history') histDate=null;
   if(t==='trend') ensureInsight();
   animateContent=true; render();
@@ -1819,7 +2025,8 @@ function copyCode(code){
 }
 
 // ---------- Accounts ----------
-function setAuthMode(m){ authMode=m; resetQuestion=null; render(); }
+function setAuthMode(m){ authMode=m; resetQuestion=null; twoFactorPending=false; twoFactorUsername=''; render(); }
+function cancelTwoFactorLogin(){ setAuthMode('login'); }
 // The personal questions offered when making an account or changing the question in Profil.
 const QUESTIONS = [
   'Apa nama hewan peliharaan pertamamu?',
@@ -1854,25 +2061,42 @@ async function submitAuth(ev){
   const value = id => document.getElementById(id)?.value || '';
   authBusy=true; errEl.hidden=true;
   try{
-    // Forgot password, step 1: find the question for this name, then show step 2.
-    if(authMode==='reset' && !resetQuestion){
-      const username = value('authUser').trim();
-      const res = await api('/api/auth/question?username='+encodeURIComponent(username));
-      const data = await res.json();
-      if(!res.ok) return fail(data.error || 'Belum berhasil. Coba lagi sebentar lagi, ya.');
-      resetQuestion = {username, question:data.question};
-      authBusy=false; render(); document.getElementById('authAnswer')?.focus();
-      return;
+    // Second step: the password (or a password reset) was accepted, now the code is checked.
+    if(twoFactorPending){
+      const res=await api('/api/auth/2fa', JSON_POST({code:value('auth2fa')}));
+      const data=await res.json();
+      if(!res.ok) return fail(data.error || 'Kodenya belum cocok. Coba lagi, ya.');
+    } else {
+      // Forgot password, step 1: find the question for this email or legacy username, then show step 2.
+      if(authMode==='reset' && !resetQuestion){
+        const identifier = value('authUser').trim();
+        const res = await api('/api/auth/question?identifier='+encodeURIComponent(identifier));
+        const data = await res.json();
+        if(!res.ok) return fail(data.error || 'Belum berhasil. Coba lagi sebentar lagi, ya.');
+        resetQuestion = {identifier, question:data.question};
+        authBusy=false; render(); document.getElementById('authAnswer')?.focus();
+        return;
+      }
+      const body = authMode==='reset'
+        ? {identifier:resetQuestion.identifier, answer:value('authAnswer'), password:value('authPass')}
+        : authMode==='register'
+          ? {email:value('authEmail').trim(), name:value('authName').trim(), password:value('authPass'), code:value('authCode').trim(),
+             ...readQuestion('auth')}
+          : {identifier:value('authUser').trim(), password:value('authPass')};
+      const res=await api(`/api/auth/${authMode==='register' ? 'register' : authMode==='reset' ? 'reset' : 'login'}`, JSON_POST(body));
+      const data=await res.json();
+      if(!res.ok) return fail(data.error || 'Belum berhasil masuk. Coba lagi sebentar lagi, ya.');
+      if(data.twoFactor){
+        twoFactorPending = true;
+        twoFactorUsername = data.email || data.username || (resetQuestion && resetQuestion.identifier) || value('authUser').trim();
+        resetQuestion = null; authBusy = false; render();
+        document.getElementById('auth2fa')?.focus();
+        return;
+      }
     }
-    const body = authMode==='reset'
-      ? {username:resetQuestion.username, answer:value('authAnswer'), password:value('authPass')}
-      : {username:value('authUser').trim(), name:value('authName').trim(), password:value('authPass'), code:value('authCode').trim(),
-         ...(authMode==='register' ? readQuestion('auth') : {})};
-    const res=await api(`/api/auth/${authMode==='register' ? 'register' : authMode==='reset' ? 'reset' : 'login'}`, JSON_POST(body));
-    const data=await res.json();
-    if(!res.ok) return fail(data.error || 'Belum berhasil masuk. Coba lagi sebentar lagi, ya.');
   }catch(e){ return fail('Djournl belum bisa terhubung ke server. Coba lagi sebentar lagi, ya.'); }
-  authBusy=false; tab='today'; animateContent=true; nudgeShown=false; resetQuestion=null;
+  authBusy=false; twoFactorPending=false; twoFactorUsername=''; tab='today';
+  animateContent=true; nudgeShown=false; resetQuestion=null;
   initStorage();
 }
 // Clears everything that belonged to the previous account before showing the sign-in screen.
@@ -1881,7 +2105,8 @@ function signedOut(){
   draftPhotos=[]; stashedPhotos=null; dayMode='daily'; closePhoto(); closeCamera(); endTour(false);
   histQuery=''; histMood=null; histTag=null; histFav=false; histDate=null; importPending=null;
   dashboardInsight=null; insightWeekCached=null; summaryText=null; summaryAt=null;
-  authMode='login'; animateContent=true; questionAsk=false; deleteAsk=false; resetQuestion=null;
+  authMode='login'; animateContent=true; questionAsk=false; emailAsk=false; deleteAsk=false; resetQuestion=null;
+  twoFactorPending=false; twoFactorUsername=''; twoFactorAsk=null; twoFactorSetup=null; twoFactorCodes=null;
   render();
   api('/api/auth/config').then(r=>r.json()).then(c=>{ authCfg=c; if(!me) render(); }).catch(()=>{});
 }
@@ -1891,37 +2116,49 @@ async function logout(){
   signedOut();
 }
 function renderAuth(){
-  const reg = authMode==='register', reset = authMode==='reset', asked = reset && resetQuestion;
-  const hint = asked ? `Untuk akun <b>@${esc(resetQuestion.username)}</b>. Jawab pertanyaan pribadimu, lalu pilih kata sandi baru.`
-    : reset ? 'Tulis nama penggunamu dulu. Setelah itu kamu akan diminta menjawab pertanyaan pribadi yang kamu pilih saat membuat akun.'
-    : !reg ? 'Jurnalmu hanya bisa dibuka dengan akunmu.'
+  const reg = authMode==='register', reset = authMode==='reset', asked = reset && resetQuestion, twofa = twoFactorPending;
+  // Old accounts still sign in with a username; new ones use an email. Show an @ only when the
+  // identifier really is a username so an address never looks like "@nama@email.com".
+  const who = (s) => s && s.includes('@') ? esc(s) : '@'+esc(s);
+  const hint = twofa ? `Masukkan kode untuk akun <b>${who(twoFactorUsername)}</b>. Buka aplikasi authenticator, atau pakai salah satu kode pemulihan yang kamu simpan.`
+    : asked ? `Untuk akun <b>${who(resetQuestion.identifier)}</b>. Jawab pertanyaan pribadimu, lalu pilih kata sandi baru.`
+    : reset ? 'Tulis email akunmu dulu. Akun lama tetap bisa memakai nama pengguna. Setelah itu kamu akan menjawab pertanyaan pribadi yang kamu pilih saat membuat akun.'
+    : !reg ? 'Jurnalmu hanya bisa dibuka dengan akunmu. Masuk dengan email dan kata sandimu.'
     : authCfg.firstAccount ? 'Ini akun pertama di server ini. Catatan yang sudah ada sebelumnya akan menjadi milik akun ini.'
     : 'Setiap akun punya jurnal sendiri. Orang lain tidak bisa membaca catatanmu.';
-  const links = reset ? (asked ? `<button class="btn-ghost-sm" onclick="setAuthMode('reset')">Ganti nama pengguna</button> ` : '')
+  const links = twofa ? `<button class="btn-ghost-sm" onclick="cancelTwoFactorLogin()">Batal, kembali ke halaman masuk</button>`
+    : reset ? (asked ? `<button class="btn-ghost-sm" onclick="setAuthMode('reset')">Ganti email/nama pengguna</button> ` : '')
       + `<button class="btn-ghost-sm" onclick="setAuthMode('login')">Kembali ke halaman masuk</button>`
     : reg ? (authCfg.firstAccount ? '' : `<button class="btn-ghost-sm" onclick="setAuthMode('login')">Sudah punya akun? Masuk</button>`)
     : (authCfg.signup ? `<button class="btn-ghost-sm" onclick="setAuthMode('register')">Belum punya akun? Daftar</button> ` : '')
       + `<button class="btn-ghost-sm" onclick="setAuthMode('reset')">Lupa kata sandi?</button>`;
-  const fields = asked ? `
+  const fields = twofa ? `
+      <label class="field"><span>Kode verifikasi</span><input id="auth2fa" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required autofocus placeholder="6 angka atau kode pemulihan"></label>
+      <p class="field-hint" style="margin-bottom:0">Kode authenticator berganti setiap 30 detik. Kode pemulihan hanya bisa dipakai satu kali.</p>`
+    : asked ? `
       <p class="asked-question">${esc(resetQuestion.question)}</p>
       <label class="field"><span>Jawabanmu</span><input id="authAnswer" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
       <label class="field"><span>Kata sandi baru</span><input id="authPass" type="password" autocomplete="new-password" required minlength="8"></label>
       <p class="field-hint" style="margin-bottom:0">Huruf besar-kecil, spasi, dan tanda baca tidak berpengaruh. Kalau jawabannya benar-benar lupa, minta pemilik server ini mengatur ulang kata sandimu.</p>`
     : reset ? `
-      <label class="field"><span>Nama pengguna</span><input id="authUser" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="24"></label>`
+      <label class="field"><span>Email</span><input id="authUser" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="254" autofocus placeholder="nama@email.com"></label>
+      <p class="field-hint" style="margin-bottom:0">Akun lama bisa memakai nama pengguna.</p>`
     : `
-      <label class="field"><span>Nama pengguna</span><input id="authUser" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="24"></label>
-      ${reg ? `<label class="field"><span>Nama panggilan</span><input id="authName" autocomplete="nickname" maxlength="30" placeholder="Yang dilihat teman di grup"></label>` : ''}
+      ${reg
+        ? `<label class="field"><span>Email</span><input id="authEmail" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required maxlength="254" autofocus placeholder="nama@email.com"></label>
+           <label class="field"><span>Nama panggilan</span><input id="authName" autocomplete="nickname" maxlength="30" placeholder="Yang dilihat teman di grup"></label>`
+        : `<label class="field"><span>Email</span><input id="authUser" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="254" autofocus placeholder="nama@email.com"></label>
+           <p class="field-hint">Akun lama bisa memakai nama pengguna.</p>`}
       <label class="field"><span>Kata sandi</span><input id="authPass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required minlength="8"></label>
       ${reg ? questionFields('auth') + '<p class="field-hint" style="margin-bottom:0">Dipakai kalau kamu lupa kata sandi. Pilih yang jawabannya hanya kamu yang tahu.</p>' : ''}
       ${reg && authCfg.needsCode ? `<label class="field"><span>Kode pendaftaran</span><input id="authCode" autocomplete="off" autocapitalize="none" spellcheck="false" required placeholder="Dari pemilik server ini"></label>` : ''}`;
   return `<section class="card auth">
-    <span class="eyebrow">${reset ? 'Lupa kata sandi' : reg ? 'Akun baru' : 'Selamat datang'}</span>
-    <h2 class="section-h">${reset ? 'Atur ulang kata sandimu' : reg ? 'Buat akun Djournl' : 'Masuk ke jurnalmu'}</h2>
+    <span class="eyebrow">${twofa ? 'Verifikasi dua langkah' : reset ? 'Lupa kata sandi' : reg ? 'Akun baru' : 'Selamat datang'}</span>
+    <h2 class="section-h">${twofa ? 'Masukkan kode verifikasi' : reset ? 'Atur ulang kata sandimu' : reg ? 'Buat akun Djournl' : 'Masuk ke jurnalmu'}</h2>
     <p class="summary-hint">${hint}</p>
     <form onsubmit="submitAuth(event)">${fields}
       <p class="summary-err" id="authErr" role="alert" hidden></p>
-      <button class="save" type="submit"><span>${asked ? 'Atur ulang kata sandi' : reset ? 'Lanjut' : reg ? 'Buat akun' : 'Masuk'}</span><span class="chev" aria-hidden="true">${ICONS.chev}</span></button>
+      <button class="save" type="submit"><span>${twofa ? 'Verifikasi' : asked ? 'Atur ulang kata sandi' : reset ? 'Lanjut' : reg ? 'Buat akun' : 'Masuk'}</span><span class="chev" aria-hidden="true">${ICONS.chev}</span></button>
     </form>
     ${links}
   </section>`;
@@ -2334,6 +2571,7 @@ function render(){
     </main>
   `;
   renderMicButtons();
+  addPasswordToggles();
   if(animate) armReveal();
   if(tourOn) placeTour();
 }

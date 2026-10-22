@@ -43,7 +43,12 @@ function sync(userId, before, after) {
   const keep = new Set(after);
   const drop = db.prepare('DELETE FROM photos WHERE id = ? AND user_id = ?');
   const claim = db.prepare('UPDATE photos SET attached = 1 WHERE id = ? AND user_id = ?');
-  before.filter((id) => !keep.has(id)).forEach((id) => drop.run(id, userId));
+  // A backup or an unusual client can put one picture id in two days. Dropping it from one day
+  // must not make it vanish from the other, so check every stored note before deleting the bytes.
+  const stillUsed = db.prepare('SELECT 1 FROM entries WHERE user_id = ? AND notes LIKE ? LIMIT 1');
+  before.filter((id) => !keep.has(id)).forEach((id) => {
+    if (!stillUsed.get(userId, `%"${id}"%`)) drop.run(id, userId);
+  });
   after.forEach((id) => claim.run(id, userId));
 }
 
@@ -56,12 +61,19 @@ function exportFor(userId, ids) {
 /** Puts a backup's pictures back. Ones this user already has are left alone; ids taken by someone else are skipped. */
 function restoreFor(userId, list) {
   if (!Array.isArray(list)) return 0;
+  // A backup is client-supplied: never let it grow an account past its album limit, however many
+  // picture records it claims to hold.
+  let count = db.prepare('SELECT COUNT(*) AS n FROM photos WHERE user_id = ?').get(userId).n;
   let restored = 0;
-  list.forEach((p) => {
-    if (!p || typeof p.id !== 'string' || !ID_RE.test(p.id) || typeof p.data !== 'string') return;
-    if (ownerOf.get(p.id)) return;
-    if (store(userId, Buffer.from(p.data, 'base64'), { attached: true, id: p.id })) restored += 1;
-  });
+  for (const p of list) {
+    if (count >= MAX_PER_USER) break;
+    if (!p || typeof p.id !== 'string' || !ID_RE.test(p.id) || typeof p.data !== 'string') continue;
+    if (ownerOf.get(p.id)) continue;
+    if (store(userId, Buffer.from(p.data, 'base64'), { attached: true, id: p.id })) {
+      restored += 1;
+      count += 1;
+    }
+  }
   return restored;
 }
 

@@ -24,6 +24,11 @@ if (trustProxy) app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustPr
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  // The camera and microphone are used only after a tap, and only by this page.
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
   // Once a browser has reached the journal over HTTPS, it should never fall back to plain HTTP.
   if (req.secure || req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   res.setHeader('Content-Security-Policy', [
@@ -46,8 +51,30 @@ const jsonBody = express.json({ limit: '1mb' });
 app.use((req, res, next) => (req.path === '/api/import' ? next() : jsonBody(req, res, next)));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// For a container/uptime check — returns fast, touches nothing.
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+// For a container/uptime check: a real query catches a disk or database that has gone away.
+app.get('/healthz', (req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Health check failed:', e.message);
+    res.status(503).json({ ok: false });
+  }
+});
+
+// A small CSRF guard on top of SameSite=Lax: a browser that sends an Origin from another site
+// is never allowed to change anything here. Requests without an Origin (curl, tests) still work.
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const origin = req.get('origin');
+    if (origin) {
+      const expected = `${req.protocol}://${req.get('host')}`;
+      if (origin !== expected) return res.status(403).json({ error: 'Permintaan ini datang dari alamat lain. Muat ulang halamannya, ya.' });
+    }
+  }
+  next();
+});
 
 // Everything under /api belongs to the signed-in user, except signing in itself.
 app.use('/api/auth', auth.router);
@@ -82,6 +109,7 @@ const entryOn = db.prepare('SELECT * FROM entries WHERE user_id = ? AND date = ?
 // ---------- Entries ----------
 const MOOD_KEYS = ['berat', 'cemas', 'biasa', 'tenang', 'senang'];
 const MAX_NOTES_PER_DAY = 50;
+const MAX_NOTE_CHARS = 20000; // far beyond a normal journal entry, but not a whole novel
 const upsertEntry = db.prepare(`
   INSERT INTO entries (user_id, date, mood, prompt, text, notes, day_summary, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(user_id, date) DO UPDATE SET mood=excluded.mood, prompt=excluded.prompt, text=excluded.text, notes=excluded.notes, day_summary=excluded.day_summary, updated_at=excluded.updated_at
@@ -102,7 +130,7 @@ function entryRow(userId, raw) {
       const pictures = photos.owned(userId, n.photos);
       return {
         prompt: typeof n.prompt === 'string' ? n.prompt.slice(0, 300) : '',
-        text: typeof n.text === 'string' ? n.text : '',
+        text: typeof n.text === 'string' ? n.text.slice(0, MAX_NOTE_CHARS) : '',
         at: Number(n.at) || Date.now(),
         ...(n.fav ? { fav: true } : {}),
         ...(pictures.length ? { photos: pictures } : {}),
@@ -347,6 +375,20 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Ada yang belum beres di server. Catatanmu aman, coba lagi sebentar lagi, ya.' });
 });
+
+// Expired sessions and half-finished second-factor tickets have no value; drop them on boot
+// and once an hour so a long-running server does not keep rows for months.
+function cleanupExpired() {
+  const now = Date.now();
+  try {
+    db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
+    db.prepare('DELETE FROM login_tickets WHERE expires_at < ?').run(now);
+  } catch (e) {
+    console.error('Cleanup failed:', e.message);
+  }
+}
+cleanupExpired();
+setInterval(cleanupExpired, 60 * 60 * 1000).unref();
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Djournl berjalan di http://localhost:${PORT}`);

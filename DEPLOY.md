@@ -109,10 +109,11 @@ Memperbarui: `git pull`, lalu perintah `up -d --build` yang sama.
 
 ## Setelah terpasang
 
-1. **Langsung buat akunmu.** Akun pertama dibuat lewat halaman daftar seperti biasa (dengan kode pendaftaran).
-2. **Bagikan alamat dan kode pendaftaran** hanya ke orang yang kamu ajak.
-3. **Coba tombol Kamera.** Di HTTPS, kamera sekarang bisa menyala langsung di halaman, termasuk di ponsel.
-4. **Kalau semua sudah mendaftar**, set `ALLOW_SIGNUP=false` supaya pendaftaran tertutup.
+1. **Langsung buat akunmu.** Akun pertama dibuat lewat halaman daftar seperti biasa (dengan email dan kode pendaftaran). Email itu yang nanti dipakai untuk masuk.
+2. **Bagikan alamat dan kode pendaftaran** hanya ke orang yang kamu ajak. Minta mereka mendaftar dengan email masing-masing. Email belum diverifikasi oleh server, jadi pastikan alamatnya memang benar.
+3. **Aktifkan verifikasi dua langkah dari Profil** kalau mau. Simpan 10 kode pemulihan yang muncul sekali itu di tempat aman; tanpa kode itu, pemilik server harus membantu membuka akun.
+4. **Coba tombol Kamera.** Di HTTPS, kamera sekarang bisa menyala langsung di halaman, termasuk di ponsel.
+5. **Kalau semua sudah mendaftar**, set `ALLOW_SIGNUP=false` supaya pendaftaran tertutup.
 
 ## Memindahkan catatan dari komputermu
 
@@ -141,17 +142,19 @@ Setiap orang juga bisa mencadangkan jurnalnya sendiri lewat **Riwayat → Cadang
 
 ## Kalau ada yang lupa kata sandi
 
-Yang ingat jawaban **pertanyaan pribadinya** bisa mengatur ulang sendiri lewat "Lupa kata sandi?" di halaman masuk. Yang lupa jawabannya juga perlu bantuanmu sebagai pemilik server:
+Yang ingat jawaban **pertanyaan pribadinya** bisa mengatur ulang sendiri lewat "Lupa kata sandi?" di halaman masuk, memakai email akun (atau nama pengguna untuk akun lama). Yang lupa jawabannya juga perlu bantuanmu sebagai pemilik server:
 
 ```bash
 # Fly.io
-fly ssh console -C "npm run reset-password -- nama-pengguna"
+fly ssh console -C "npm run reset-password -- alamat@email.com"
 
 # VPS
-docker compose -f docker-compose.prod.yml exec djournl npm run reset-password -- nama-pengguna
+docker compose -f docker-compose.prod.yml exec djournl npm run reset-password -- alamat@email.com
 ```
 
-Perintah itu mencetak kata sandi sementara dan mengeluarkan akun itu dari semua perangkat. Berikan kata sandinya ke pemilik akun, lalu minta ia menggantinya dan mengatur ulang pertanyaan pribadinya di halaman Profil. Di Railway, jalankan perintah yang sama lewat shell layanannya.
+Perintah itu juga menerima nama pengguna lama kalau akunnya belum punya email. Ia mencetak kata sandi sementara, mengeluarkan akun itu dari semua perangkat, dan **mematikan verifikasi dua langkah** kalau akun itu memakainya. Berikan kata sandinya ke pemilik akun, lalu minta ia menggantinya, mengatur ulang pertanyaan pribadinya, dan mengaktifkan lagi verifikasi dua langkah di halaman Profil. Di Railway, jalankan perintah yang sama lewat shell layanannya.
+
+Kalau pemilik akun masih bisa masuk dengan kata sandi tetapi kehilangan authenticator, ia bisa memakai salah satu **kode pemulihan** di halaman masuk, lalu membuat kode baru atau mematikan 2FA dari Profil. Kode pemulihan hanya bisa dipakai sekali.
 
 ## Yang sudah dan belum diuji
 

@@ -21,11 +21,16 @@ if (!fs.existsSync(dbFile) && fs.existsSync(legacyDbFile)) {
 
 const db = new Database(dbFile);
 db.pragma('journal_mode = WAL');
+// WAL plus NORMAL is the usual fast-and-safe pair for a small single-file app; the busy timeout
+// makes two requests that write at the same instant wait for each other instead of throwing.
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 5000');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
+    email TEXT,
     name TEXT NOT NULL,
     pass_hash TEXT NOT NULL,
     pass_salt TEXT NOT NULL,
@@ -64,6 +69,29 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS photos_by_user ON photos (user_id, attached);
+
+  -- Optional second factor. The secret is only trusted once the person proves they can make a
+  -- code from it (enabled = 1), so an abandoned setup cannot lock anyone out.
+  CREATE TABLE IF NOT EXISTS totp (
+    user_id INTEGER PRIMARY KEY,
+    secret TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  -- Recovery codes are shown once and stored as SHA-256 hashes, like session tokens.
+  CREATE TABLE IF NOT EXISTS recovery_codes (
+    user_id INTEGER NOT NULL,
+    code_hash TEXT NOT NULL,
+    used_at INTEGER,
+    PRIMARY KEY (user_id, code_hash)
+  );
+  -- A short-lived ticket between "password was right" and "second factor was right".
+  CREATE TABLE IF NOT EXISTS login_tickets (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS login_tickets_expiry ON login_tickets (expires_at);
 `);
 
 const columnsOf = (table) => db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
@@ -72,10 +100,15 @@ const columnsOf = (table) => db.prepare(`PRAGMA table_info(${table})`).all().map
 // Accounts made before it existed have none until their owner sets one from Profil.
 // recovery_hash belonged to a short-lived recovery-code scheme that the question replaced.
 const userColumns = columnsOf('users');
-['secret_question', 'secret_hash', 'secret_salt'].forEach((column) => {
+['secret_question', 'secret_hash', 'secret_salt', 'email'].forEach((column) => {
   if (!userColumns.includes(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT`);
 });
 if (userColumns.includes('recovery_hash')) db.exec('ALTER TABLE users DROP COLUMN recovery_hash');
+
+// New accounts sign in with an email. Accounts made before emails existed keep a NULL email
+// until their owner adds one from Profil; a partial index keeps those NULLs from colliding while
+// still making every real address unique.
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users (email) WHERE email IS NOT NULL');
 
 // joined_day is the member's own local date when they joined; rows from before it existed
 // fall back to the UTC date of joined_at (see circles.js).
