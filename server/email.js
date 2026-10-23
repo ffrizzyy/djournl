@@ -21,8 +21,12 @@ const resendKey = () => String(process.env.RESEND_API_KEY || '');
 const resendEndpoint = () => String(process.env.RESEND_API_URL || 'https://api.resend.com/emails');
 
 const smtpConfigured = () => !!(sender() && smtpHost() && smtpUser() && smtpPass());
+const smtpRequested = () => !!(smtpHost() || smtpUser() || smtpPass());
 const resendConfigured = () => !!(sender() && resendKey());
-const mailConfigured = () => smtpConfigured() || resendConfigured();
+// If any SMTP setting is present, SMTP is the intended provider. Do not silently fall back to
+// Resend when SMTP is only half-filled: that would try to send from a Gmail address through an
+// unverified Resend domain.
+const mailConfigured = () => (smtpRequested() ? smtpConfigured() : resendConfigured());
 
 let transport;
 const smtpTransport = () => {
@@ -43,7 +47,10 @@ const smtpTransport = () => {
 
 /** Sends one plain-text message. Throws when no provider is configured or the provider refuses it. */
 async function sendMail({ to, subject, text }) {
-  if (smtpConfigured()) {
+  if (smtpRequested()) {
+    if (!smtpConfigured()) {
+      throw new Error('SMTP is incomplete: set SMTP_HOST, SMTP_USER, SMTP_PASS, and EMAIL_FROM');
+    }
     const info = await smtpTransport().sendMail({ from: sender(), to, subject, text });
     return { id: info.messageId };
   }
