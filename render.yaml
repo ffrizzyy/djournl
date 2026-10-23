@@ -14,9 +14,17 @@ services:
     envVars:
       - key: TRUST_PROXY
         value: "1"
-      - key: RESEND_API_KEY   # filled in on the Render dashboard, never committed
+      - key: SMTP_HOST       # e.g. smtp.gmail.com, filled in on the Render dashboard
         sync: false
-      - key: EMAIL_FROM       # a sender verified in Resend
+      - key: SMTP_PORT       # 465, or 587 for STARTTLS
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS       # a Gmail App Password, never the normal password
+        sync: false
+      - key: EMAIL_FROM      # e.g. "Djournl <you@gmail.com>"
+        sync: false
+      - key: RESEND_API_KEY   # alternative to SMTP, needs a verified Resend domain
         sync: false
       - key: APP_URL          # the public address, for links in reset emails
         sync: false

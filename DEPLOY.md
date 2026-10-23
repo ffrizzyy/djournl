@@ -12,13 +12,24 @@ Panduan ini untuk memindahkan Djournl dari `localhost` ke alamat yang bisa dibuk
 
 | Variabel | Isi | Kenapa |
 |---|---|---|
-| `RESEND_API_KEY` | kunci API dari https://resend.com | Supaya tautan "Lupa kata sandi?" bisa dikirim lewat email. **Isi ini** (bersama `EMAIL_FROM`) kalau ingin reset mandiri. |
-| `EMAIL_FROM` | pengirim yang domainnya sudah diverifikasi di Resend, mis. `Djournl <no-reply@namadomain.com>` | Alamat pengirim tautan reset. |
+| `SMTP_HOST` | `smtp.gmail.com` | Server SMTP untuk mengirim tautan "Lupa kata sandi?". Cara termudah kalau belum punya domain. |
+| `SMTP_PORT` | `465` | Port SMTP. `465` memakai TLS langsung; `587` memakai STARTTLS. |
+| `SMTP_USER` | alamat Gmail-mu | Akun yang mengirim email. |
+| `SMTP_PASS` | App Password Gmail | **Bukan** kata sandi Gmail biasa. Buat di Google Account → Security → App passwords setelah 2-Step Verification aktif. |
+| `EMAIL_FROM` | `Djournl <alamat@gmail.com>` | Pengirim yang muncul di email. Untuk Gmail, samakan dengan `SMTP_USER`. |
+| `RESEND_API_KEY` | kunci API dari https://resend.com | Alternatif kalau nanti punya domain terverifikasi. Kalau SMTP lengkap, SMTP yang dipakai. |
 | `TRUST_PROXY` | `1` | Supaya aplikasi tahu alamat asli pengunjung dan bahwa mereka datang lewat HTTPS. Sudah diisi di berkas konfigurasi di bawah. |
 | `ANTHROPIC_API_KEY` | kunci API-mu | Opsional. Tanpa ini semua tetap jalan, hanya rangkuman AI yang tidak aktif. |
 | `ALLOW_SIGNUP` | `false` | Opsional, untuk nanti: menutup pendaftaran sepenuhnya setelah semua orang yang kamu ajak sudah punya akun. |
 
 Daftar lengkapnya ada di `.env.example`.
+
+### Kalau memakai Gmail
+
+1. Aktifkan **2-Step Verification** di akun Google.
+2. Buka **Google Account → Security → App passwords**, buat satu untuk `Djournl`, lalu salin 16 karakter yang muncul.
+3. Isi `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<alamat Gmail>`, `SMTP_PASS=<App Password>`, dan `EMAIL_FROM=Djournl <alamat Gmail>`.
+4. Jangan memakai kata sandi Gmail biasa; Gmail akan menolaknya.
 
 ## Pilihan tempat hosting
 
@@ -49,7 +60,7 @@ Semua platform itu berbayar atau meminta kartu untuk disk persisten. Cek harga t
    ```
 4. Isi rahasianya (tidak pernah masuk ke git):
    ```bash
-   fly secrets set RESEND_API_KEY="re_..." EMAIL_FROM="Djournl <no-reply@namadomain.com>"
+   fly secrets set SMTP_HOST="smtp.gmail.com" SMTP_PORT="465" SMTP_USER="alamat@gmail.com" SMTP_PASS="app-password" EMAIL_FROM="Djournl <alamat@gmail.com>"
    fly secrets set ANTHROPIC_API_KEY="sk-ant-..."   # opsional
    ```
 5. Pasang dan buka:
@@ -66,7 +77,7 @@ Memperbarui setelah ada perubahan kode: `fly deploy` lagi. Datanya aman karena a
 
 1. Di https://railway.app pilih **New Project → Deploy from GitHub repo**, lalu pilih repo `djournl`. Railway membangun dari `Dockerfile` secara otomatis.
 2. Di layanan itu, tambahkan **Volume** dengan mount path `/app/data`.
-3. Di tab **Variables**, isi `RESEND_API_KEY`, `EMAIL_FROM`, `TRUST_PROXY=1`, `PORT=3000`, dan (opsional) `ANTHROPIC_API_KEY`.
+3. Di tab **Variables**, isi `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `TRUST_PROXY=1`, `PORT=3000`, dan (opsional) `ANTHROPIC_API_KEY`.
 4. Di **Settings → Networking**, buat domain publik (port `3000`).
 
 Setiap `git push` ke `main` akan memasang versi baru.
@@ -74,7 +85,7 @@ Setiap `git push` ke `main` akan memasang versi baru.
 ## C. Render
 
 1. Di https://render.com pilih **New → Blueprint**, lalu pilih repo `djournl`. Render membaca `render.yaml`: satu layanan Docker dengan disk 1 GB di `/app/data`.
-2. Saat diminta, isi `RESEND_API_KEY`, `EMAIL_FROM`, dan (opsional) `ANTHROPIC_API_KEY`.
+2. Saat diminta, isi `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, dan (opsional) `ANTHROPIC_API_KEY`.
 3. Tunggu sampai statusnya *Live*, lalu buka alamat `onrender.com` yang diberikan.
 
 Disk di Render butuh paket berbayar; `render.yaml` sudah memilih paket `starter`.
@@ -93,8 +104,11 @@ Buka `.env`, lalu isi minimal:
 
 ```
 DOMAIN=jurnal.contoh.com
-RESEND_API_KEY=re_...
-EMAIL_FROM=Djournl <no-reply@namadomain.com>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=alamat@gmail.com
+SMTP_PASS=app-password
+EMAIL_FROM=Djournl <alamat@gmail.com>
 ```
 
 Jalankan:
@@ -144,7 +158,7 @@ Setiap orang juga bisa mencadangkan jurnalnya sendiri lewat **Riwayat → Cadang
 
 ## Kalau ada yang lupa kata sandi
 
-Yang masih bisa membuka emailnya bisa mengatur ulang sendiri lewat "Lupa kata sandi?" di halaman masuk: masukkan email akun (atau nama pengguna untuk akun lama), lalu buka tautan sekali pakai yang dikirim Resend. Tautannya berlaku 30 menit.
+Yang masih bisa membuka emailnya bisa mengatur ulang sendiri lewat "Lupa kata sandi?" di halaman masuk: masukkan email akun (atau nama pengguna untuk akun lama), lalu buka tautan sekali pakai yang dikirim lewat SMTP atau Resend. Tautannya berlaku 30 menit.
 
 Kalau email tidak bisa diakses, atau pengiriman email belum dikonfigurasi, pemilik server bisa memberi kata sandi sementara:
 

@@ -19,7 +19,7 @@ Jurnal harian dengan mood tracker (beberapa catatan per hari), dashboard tren mo
 
 Akun baru dibuat dengan **email + kata sandi**. Email disimpan dalam huruf kecil dan harus unik; nama pengguna internal dibuat otomatis dari bagian sebelum `@` (mis. `farrel`), jadi kamu tidak perlu memilih nama pengguna saat mendaftar. Masuk bisa memakai email itu, sedangkan akun lama tetap bisa memakai nama penggunanya.
 
-Email bisa diganti dari **Profil → Keamanan** dengan memasukkan kata sandi sekarang. Lupa kata sandi memakai **tautan reset sekali pakai yang dikirim lewat email** (lihat variabel `RESEND_API_KEY` dan `EMAIL_FROM`); belum ada verifikasi alamat email, jadi pastikan alamatnya benar saat mendaftar atau menggantinya.
+Email bisa diganti dari **Profil → Keamanan** dengan memasukkan kata sandi sekarang. Lupa kata sandi memakai **tautan reset sekali pakai yang dikirim lewat email** (SMTP atau Resend; lihat variabel `SMTP_*`, `RESEND_API_KEY`, dan `EMAIL_FROM`); belum ada verifikasi alamat email, jadi pastikan alamatnya benar saat mendaftar atau menggantinya.
 
 ### Streak bareng
 
@@ -67,8 +67,12 @@ npm test   # menjalankan server sungguhan dengan database sementara, lalu menguj
 | `SIGNUPS_PER_HOUR` | `10` | Batas pembuatan akun per jam dari satu alamat IP |
 | `AI_DAILY_LIMIT` | `30` | Batas permintaan AI per akun per hari, karena semua akun memakai kunci API yang sama |
 | `PHOTO_LIMIT` | `2000` | Jumlah foto maksimal per akun |
-| `RESEND_API_KEY` | kosong | Kunci API Resend untuk mengirim tautan reset kata sandi. Tanpa ini fitur lupa kata sandi lewat email tidak aktif |
-| `EMAIL_FROM` | kosong | Pengirim email yang domainnya sudah diverifikasi di Resend, mis. `Djournl <no-reply@contoh.com>` |
+| `RESEND_API_KEY` | kosong | Alternatif pengiriman lewat Resend; butuh `EMAIL_FROM` dengan domain terverifikasi. Kalau SMTP lengkap, SMTP yang dipakai |
+| `SMTP_HOST` | kosong | Server SMTP, mis. `smtp.gmail.com`. Isi bersama `SMTP_USER`, `SMTP_PASS`, dan `EMAIL_FROM` untuk mengaktifkan email reset tanpa domain |
+| `SMTP_PORT` | `465` | Port SMTP. `465` memakai TLS langsung; `587` memakai STARTTLS |
+| `SMTP_USER` | kosong | Alamat email untuk login SMTP, mis. alamat Gmail |
+| `SMTP_PASS` | kosong | App Password SMTP, bukan kata sandi email biasa. Untuk Gmail: 2-Step Verification lalu buat App Password |
+| `EMAIL_FROM` | kosong | Pengirim untuk SMTP atau Resend, mis. `Djournl <alamat@gmail.com>` (Gmail) atau `Djournl <no-reply@domainmu.com>` (Resend) |
 | `APP_URL` | alamat permintaan | Alamat publik aplikasi untuk tautan di email, mis. `https://jurnal.contoh.com`. Biasanya tidak perlu diisi |
 | `TRUST_PROXY` | kosong | Jumlah proxy di depan aplikasi (biasanya `1` di hosting). Kosongkan saat dijalankan langsung |
 | `AI_PROVIDER` dan kuncinya | `anthropic` | Lihat bagian di bawah |
@@ -190,7 +194,7 @@ Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `
 
 ## Catatan jujur soal keterbatasan
 
-- **Lupa kata sandi memakai email.** Tautan reset sekali pakai dikirim lewat Resend, jadi server harus punya `RESEND_API_KEY` dan `EMAIL_FROM` yang domainnya sudah diverifikasi. Kalau email tidak bisa diakses atau pengiriman belum dikonfigurasi, pemilik server bisa menjalankan `npm run reset-password -- <email-atau-nama-pengguna>` untuk memberi kata sandi sementara.
+- **Lupa kata sandi memakai email.** Tautan reset sekali pakai dikirim lewat SMTP atau Resend. Untuk SMTP, isi `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, dan `EMAIL_FROM`; untuk Gmail pakai App Password, bukan kata sandi biasa. Untuk Resend, isi `RESEND_API_KEY` dan `EMAIL_FROM` dengan domain terverifikasi. Kalau email tidak bisa diakses atau pengiriman belum dikonfigurasi, pemilik server bisa menjalankan `npm run reset-password -- <email-atau-nama-pengguna>` untuk memberi kata sandi sementara.
 - **Email belum diverifikasi.** Siapa pun bisa mendaftar dengan alamat yang bukan miliknya selama alamat itu belum dipakai akun lain. Email adalah identitas masuk dan kanal reset, tetapi Djournl tidak membuktikan bahwa alamat itu benar-benar milik pendaftar. Pastikan alamatnya benar saat mendaftar atau menggantinya.
 - **Verifikasi dua langkah bisa mengunci diri sendiri kalau kuncinya hilang.** Kode pemulihan hanya ditampilkan sekali saat aktivasi; simpan sebelum menutup halaman. Kalau authenticator dan semua kode pemulihan hilang, pemilik server harus menjalankan `npm run reset-password -- <email-atau-nama-pengguna>`, yang juga mematikan 2FA untuk akun itu. Tautan reset lewat email tetap meminta kode 2FA, jadi tautan itu saja tidak bisa membuka akun.
 - **Hapus akun bersifat permanen.** Tidak ada masa tunggu atau tempat sampah. Cadangkan dulu lewat Riwayat kalau catatannya masih diinginkan.
@@ -209,7 +213,7 @@ Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `
 
 ## Pengujian
 
-`npm test` menjalankan server sungguhan dengan database sementara dan mengujinya lewat HTTP: akun dan sesi, **pendaftaran dan masuk dengan email**, nama pengguna otomatis yang unik, **mengganti email dari Profil**, isolasi jurnal antar akun, validasi catatan, tanggal lokal, cadangan dan pemulihan, aturan streak grup, foto (unggah, privasi antar akun, pembersihan, cadangan), jawaban saat AI belum diaktifkan, header keamanan, **2FA (setup, masuk, kode pemulihan sekali pakai, matikan)**, **lupa kata sandi lewat tautan email** (termasuk tautan sekali pakai dan penggantian tautan lama), **reset kata sandi yang tetap meminta 2FA**, **keluar dari perangkat lain**, **penolakan permintaan lintas situs**, dan **batas panjang catatan**. Pengiriman email diuji dengan server Resend tiruan di dalam test.
+`npm test` menjalankan server sungguhan dengan database sementara dan mengujinya lewat HTTP: akun dan sesi, **pendaftaran dan masuk dengan email**, nama pengguna otomatis yang unik, **mengganti email dari Profil**, isolasi jurnal antar akun, validasi catatan, tanggal lokal, cadangan dan pemulihan, aturan streak grup, foto (unggah, privasi antar akun, pembersihan, cadangan), jawaban saat AI belum diaktifkan, header keamanan, **2FA (setup, masuk, kode pemulihan sekali pakai, matikan)**, **lupa kata sandi lewat tautan email** (termasuk tautan sekali pakai dan penggantian tautan lama), **reset kata sandi yang tetap meminta 2FA**, **keluar dari perangkat lain**, **penolakan permintaan lintas situs**, dan **batas panjang catatan**. Pengiriman email diuji lewat jalur Resend tiruan di dalam test; jalur SMTP diuji saat konfigurasi server.
 
 Di luar itu, halaman utama sudah dijalankan di Chrome headless (ponsel dan desktop, terang dan gelap) untuk memeriksa alur daftar/masuk, ketiga tab, pemulihan draf, perubahan mood, foto dan kamera (dengan perangkat kamera simulasi), seluruh langkah tur fitur, tanggal di beberapa zona waktu, dan bahwa tidak ada pelanggaran Content-Security-Policy. UI 2FA yang baru diuji lewat HTTP end-to-end; pemeriksaan visual terakhirnya dilakukan saat deploy.
 
