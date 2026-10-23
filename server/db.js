@@ -9,13 +9,17 @@ const Database = require('better-sqlite3');
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
-// The journal used to live in azzifa.sqlite. Renaming the app must not strand the data on an
-// existing disk, so the old file is moved into place (with its WAL sidecars) before it is opened.
+// The journal used to be stored under the app's previous name. Renaming the app must not strand
+// the data on an existing disk, so an existing database file is moved into place (with its WAL
+// sidecars) before the database is opened.
 const dbFile = path.join(dataDir, 'djournl.sqlite');
-const legacyDbFile = path.join(dataDir, 'azzifa.sqlite');
-if (!fs.existsSync(dbFile) && fs.existsSync(legacyDbFile)) {
-  for (const suffix of ['', '-wal', '-shm']) {
-    if (fs.existsSync(legacyDbFile + suffix)) fs.renameSync(legacyDbFile + suffix, dbFile + suffix);
+if (!fs.existsSync(dbFile)) {
+  const legacyName = fs.readdirSync(dataDir).find((name) => name.endsWith('.sqlite'));
+  if (legacyName) {
+    const legacyDbFile = path.join(dataDir, legacyName);
+    for (const suffix of ['', '-wal', '-shm']) {
+      if (fs.existsSync(legacyDbFile + suffix)) fs.renameSync(legacyDbFile + suffix, dbFile + suffix);
+    }
   }
 }
 
