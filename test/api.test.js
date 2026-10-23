@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { utcDay, shiftDay } = require('../server/day');
@@ -11,13 +12,32 @@ const twofactor = require('../server/twofactor');
 
 const PORT = 3491;
 const BASE = `http://127.0.0.1:${PORT}`;
+const MAIL_PORT = 3493;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'djournl-test-'));
-let server;
+const outbox = [];        // every message the app tried to send through Resend
+let server, mailServer;
 
 before(async () => {
+  // A stand-in for Resend: it records what the app sends and always accepts it.
+  mailServer = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => {
+      if (req.method !== 'POST' || req.url !== '/emails') { res.writeHead(404); res.end(); return; }
+      try { outbox.push(JSON.parse(raw)); } catch (e) { /* ignore malformed bodies */ }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ id: `mail-${outbox.length}` }));
+    });
+  });
+  await new Promise((resolve) => mailServer.listen(MAIL_PORT, '127.0.0.1', resolve));
   server = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], {
     // An empty key keeps the AI "unconfigured" even if the developer's own .env has one.
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '', ALLOW_SIGNUP: 'true', SIGNUPS_PER_HOUR: '100' },
+    env: {
+      ...process.env, PORT: String(PORT), DATA_DIR: dataDir, AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '',
+      ALLOW_SIGNUP: 'true', SIGNUPS_PER_HOUR: '100', TRUST_PROXY: '1',
+      RESEND_API_KEY: 'test-key', EMAIL_FROM: 'Djournl <no-reply@example.test>',
+      RESEND_API_URL: `http://127.0.0.1:${MAIL_PORT}/emails`, APP_URL: BASE,
+    },
     stdio: 'ignore',
   });
   for (let i = 0; i < 50; i++) {
@@ -30,6 +50,7 @@ before(async () => {
 after(async () => {
   server.kill();
   await new Promise((r) => server.once('exit', r));
+  await new Promise((resolve) => mailServer.close(resolve));
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
@@ -96,6 +117,20 @@ const enableTwoFactor = async (c, username) => {
   assert.equal(enabled.status, 200);
   return { secret: setup.data.secret, uri: setup.data.uri, codes: enabled.data.recoveryCodes };
 };
+// The newest reset email for an address, and the one-time token in its link.
+const resetTokenFor = (email) => {
+  const message = [...outbox].reverse().find((m) => (Array.isArray(m.to) ? m.to : [m.to]).includes(email));
+  assert.ok(message, `no reset email was sent to ${email}`);
+  const match = String(message.text || '').match(/https?:\/\/\S+\?reset=([a-f0-9]{64})/);
+  assert.ok(match, 'the email carries a reset link');
+  return match[1];
+};
+// A request from a chosen address, for the rate-limit tests (TRUST_PROXY is on for this server).
+const postFrom = (ip, url, body) => fetch(BASE + url, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip },
+  body: JSON.stringify(body),
+});
 
 const today = utcDay();
 const yesterday = shiftDay(today, -1);
@@ -106,7 +141,7 @@ test('nothing under /api is readable without signing in', async () => {
     assert.equal((await anon('GET', url)).status, 401, url);
   }
   const cfg = (await anon('GET', '/api/auth/config')).data;
-  assert.deepEqual(cfg, { signup: true, firstAccount: true, needsCode: false });
+  assert.deepEqual(cfg, { signup: true, firstAccount: true, emailReset: true });
 });
 
 test('responses carry the security headers', async () => {
@@ -389,13 +424,13 @@ test('two-factor: a password reset still asks for the second factor', async () =
   const c = client();
   assert.equal((await c('POST', '/api/auth/register', {
     email: 'zahra@example.test', username: 'zahra', name: 'Zahra', password: 'rahasia-zahra-1',
-    question: 'Apa nama sekolah dasarmu?', answer: 'SD Melati',
   })).status, 200);
   const factor = await enableTwoFactor(c, 'zahra');
   await c('POST', '/api/auth/logout');
 
   const fresh = client();
-  const reset = await fresh('POST', '/api/auth/reset', { username: 'zahra', answer: 'sd melati', password: 'sandi-baru-456' });
+  assert.equal((await fresh('POST', '/api/auth/forgot', { email: 'zahra@example.test' })).status, 200);
+  const reset = await fresh('POST', '/api/auth/reset', { token: resetTokenFor('zahra@example.test'), password: 'sandi-baru-456' });
   assert.equal(reset.status, 200);
   assert.equal(reset.data.twoFactor, true, 'the reset does not skip the code');
   assert.equal((await fresh('GET', '/api/me')).status, 401);
@@ -499,31 +534,27 @@ test('pictures: upload, attach to a note, and stay private to their owner', asyn
   assert.equal((await nina.raw(`/api/photos/${c}`)).status, 404);
 });
 
-test('forgot password: the personal question sets a new password', async () => {
+test('forgot password: an emailed link sets a new password', async () => {
   const laptop = client();
-  const question = 'Apa nama hewan peliharaan pertamamu?';
-  assert.equal((await laptop('POST', '/api/auth/register', { email: 'umar@example.test', username: 'umar', password: 'rahasia-umar-1', question, answer: 'x' })).status, 400, 'an answer too short to mean anything');
-  assert.equal((await laptop('POST', '/api/auth/register', { email: 'umar@example.test', username: 'umar', password: 'rahasia-umar-1', question: 'Apa?', answer: 'Si Putih' })).status, 400);
-  assert.equal((await laptop('POST', '/api/auth/register', { email: 'umar@example.test', username: 'umar', name: 'Umar', password: 'rahasia-umar-1', question, answer: 'Si Putih' })).status, 200);
+  assert.equal((await laptop('POST', '/api/auth/register', { email: 'umar@example.test', username: 'umar', name: 'Umar', password: 'rahasia-umar-1' })).status, 200);
   const me = (await laptop('GET', '/api/me')).data;
-  assert.equal(me.question, question);
   assert.equal(me.email, 'umar@example.test');
-  assert.deepEqual(Object.keys(me).sort(), ['createdAt', 'email', 'id', 'name', 'question', 'recoveryCodesLeft', 'twoFactor', 'username'], 'the answer never leaves the server');
+  assert.deepEqual(Object.keys(me).sort(), ['createdAt', 'email', 'id', 'name', 'recoveryCodesLeft', 'twoFactor', 'username'], 'no secret answer is ever returned');
   const phone = client();
   assert.equal((await phone('POST', '/api/auth/login', { username: 'umar', password: 'rahasia-umar-1' })).status, 200);
 
   const fresh = client();
-  assert.equal((await fresh('GET', '/api/auth/question?username=UMAR')).data.question, question, 'legacy usernames still work');
-  assert.equal((await fresh('GET', '/api/auth/question?identifier=umar%40example.test')).data.question, question, 'and so do emails');
-  const decoy = (await fresh('GET', '/api/auth/question?identifier=tidak-ada')).data.question;
-  assert.equal(typeof decoy, 'string', 'an unknown name still gets a question');
-  assert.equal((await fresh('GET', '/api/auth/question?identifier=tidak-ada')).data.question, decoy, 'and always the same one');
+  // An address that is not registered gets the same answer, and no email is sent.
+  const before = outbox.length;
+  assert.equal((await fresh('POST', '/api/auth/forgot', { identifier: 'tidak-ada@example.test' })).status, 200);
+  assert.equal(outbox.length, before, 'an unknown address causes no mail');
 
-  assert.equal((await fresh('POST', '/api/auth/reset', { identifier: 'umar@example.test', answer: 'Si Hitam', password: 'sandi-baru-456' })).status, 401);
-  assert.equal((await fresh('POST', '/api/auth/reset', { identifier: 'tidak-ada', answer: 'Si Putih', password: 'sandi-baru-456' })).status, 401, 'an unknown name answers the same way');
-  assert.equal((await fresh('POST', '/api/auth/reset', { identifier: 'umar@example.test', answer: 'Si Putih', password: 'pendek' })).status, 400);
-  // Typed the way a person would a year later: different case, no space, stray punctuation.
-  const reset = await fresh('POST', '/api/auth/reset', { identifier: 'UMAR@EXAMPLE.TEST', answer: ' siPUTIH! ', password: 'sandi-baru-456' });
+  assert.equal((await fresh('POST', '/api/auth/forgot', { email: 'umar@example.test' })).status, 200);
+  const token = resetTokenFor('umar@example.test');
+
+  assert.equal((await fresh('POST', '/api/auth/reset', { token: '0'.repeat(64), password: 'sandi-baru-456' })).status, 401, 'a made-up token is refused');
+  assert.equal((await fresh('POST', '/api/auth/reset', { token, password: 'pendek' })).status, 400);
+  const reset = await fresh('POST', '/api/auth/reset', { token, password: 'sandi-baru-456' });
   assert.equal(reset.status, 200);
   assert.equal(reset.data.email, 'umar@example.test');
   assert.equal((await fresh('GET', '/api/me')).data.username, 'umar', 'the reset signs you in');
@@ -531,31 +562,26 @@ test('forgot password: the personal question sets a new password', async () => {
   assert.equal((await phone('GET', '/api/me')).status, 401);
   assert.equal((await client()('POST', '/api/auth/login', { email: 'umar@example.test', password: 'rahasia-umar-1' })).status, 401);
   assert.equal((await client()('POST', '/api/auth/login', { email: 'umar@example.test', password: 'sandi-baru-456' })).status, 200);
+  assert.equal((await fresh('POST', '/api/auth/reset', { token, password: 'sandi-lain-789' })).status, 401, 'the link only works once');
 });
 
-test('guessing a personal answer is cut off after a few tries', async () => {
-  await client()('POST', '/api/auth/register', { email: 'xavi@example.test', username: 'xavi', password: 'rahasia-xavi-1', question: 'Apa nama sekolah dasarmu?', answer: 'SD Mawar' });
-  const guesser = client();
+test('asking for reset links is cut off per address', async () => {
   let last;
-  for (let i = 0; i < 6; i++) last = await guesser('POST', '/api/auth/reset', { username: 'xavi', answer: `tebakan ${i}`, password: 'sandi-baru-456' });
+  for (let i = 0; i < 6; i++) last = await postFrom('203.0.113.77', '/api/auth/forgot', { email: `tidak-ada-${i}@example.test` });
   assert.equal(last.status, 429);
-  assert.equal((await guesser('POST', '/api/auth/reset', { username: 'xavi', answer: 'SD Mawar', password: 'sandi-baru-456' })).status, 429, 'even the right answer has to wait');
-  assert.equal((await client()('POST', '/api/auth/login', { username: 'xavi', password: 'rahasia-xavi-1' })).status, 200, 'signing in normally is unaffected');
+  assert.equal((await postFrom('203.0.113.78', '/api/auth/forgot', { email: 'tidak-ada@example.test' })).status, 200, 'a different visitor is not caught in someone else\u2019s lockout');
 });
 
-test('the personal question can be set or changed from the account, with the password', async () => {
-  const c = await register('vera');   // made without a question, like an account from before the feature
-  assert.equal((await c('GET', '/api/me')).data.question, null);
-  assert.equal((await client()('POST', '/api/auth/reset', { username: 'vera', answer: 'apa saja', password: 'sandi-baru-456' })).status, 401, 'no question, no reset');
-  const body = { question: '  Apa nama warung   langgananku? ', answer: 'Bu Tini' };
-  assert.equal((await c('POST', '/api/account/question', { ...body, password: 'bukan-ini-123' })).status, 403);
-  assert.equal((await c('POST', '/api/account/question', { ...body, answer: '', password: 'rahasia-vera-1' })).status, 400);
-  assert.equal((await c('POST', '/api/account/question', { ...body, password: 'rahasia-vera-1' })).data.question, 'Apa nama warung langgananku?');
-  assert.equal((await c('GET', '/api/me')).data.question, 'Apa nama warung langgananku?');
-  await c('POST', '/api/account/question', { question: 'Apa nama sekolah dasarmu?', answer: 'SD Melati', password: 'rahasia-vera-1' });
-  assert.equal((await client()('POST', '/api/auth/reset', { username: 'vera', answer: 'Bu Tini', password: 'sandi-baru-456' })).status, 401, 'the old answer is replaced');
-  assert.equal((await client()('POST', '/api/auth/reset', { username: 'vera', answer: 'sd melati', password: 'sandi-baru-456' })).status, 200);
-  assert.equal((await client()('POST', '/api/account/question', { ...body, password: 'x' })).status, 401, 'needs a session');
+test('a newer reset link replaces the earlier one', async () => {
+  const c = await register('wati');
+  assert.equal((await postFrom('198.51.100.23', '/api/auth/forgot', { email: 'wati@example.test' })).status, 200);
+  const first = resetTokenFor('wati@example.test');
+  assert.equal((await postFrom('198.51.100.23', '/api/auth/forgot', { email: 'wati@example.test' })).status, 200);
+  const second = resetTokenFor('wati@example.test');
+  assert.notEqual(first, second);
+  assert.equal((await client()('POST', '/api/auth/reset', { token: first, password: 'sandi-baru-456' })).status, 401, 'the old link is dead');
+  assert.equal((await client()('POST', '/api/auth/reset', { token: second, password: 'sandi-baru-456' })).status, 200);
+  assert.equal((await c('GET', '/api/me')).status, 401);
 });
 
 test('deleting an account removes everything it owned and frees the name', async () => {

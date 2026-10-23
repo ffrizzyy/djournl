@@ -14,7 +14,11 @@ services:
     envVars:
       - key: TRUST_PROXY
         value: "1"
-      - key: SIGNUP_CODE      # filled in on the Render dashboard, never committed
+      - key: RESEND_API_KEY   # filled in on the Render dashboard, never committed
+        sync: false
+      - key: EMAIL_FROM       # a sender verified in Resend
+        sync: false
+      - key: APP_URL          # the public address, for links in reset emails
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false

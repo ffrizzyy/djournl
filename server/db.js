@@ -38,10 +38,7 @@ db.exec(`
     name TEXT NOT NULL,
     pass_hash TEXT NOT NULL,
     pass_salt TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    secret_question TEXT,
-    secret_hash TEXT,
-    secret_salt TEXT
+    created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -96,18 +93,28 @@ db.exec(`
     expires_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS login_tickets_expiry ON login_tickets (expires_at);
+  -- Single-use links emailed to someone who forgot their password. Only the hash is stored.
+  CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets (user_id);
+  CREATE INDEX IF NOT EXISTS password_resets_expiry ON password_resets (expires_at);
 `);
 
 const columnsOf = (table) => db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
 
-// The personal question for a forgotten password, and the hash of its answer (see auth.js).
-// Accounts made before it existed have none until their owner sets one from Profil.
-// recovery_hash belonged to a short-lived recovery-code scheme that the question replaced.
+// Email is now the sign-in identity for every account. The old personal-question columns (and a
+// short-lived recovery hash before that) are no longer read anywhere; drop them so an upgraded
+// database has the same shape as a fresh one.
 const userColumns = columnsOf('users');
-['secret_question', 'secret_hash', 'secret_salt', 'email'].forEach((column) => {
-  if (!userColumns.includes(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT`);
-});
-if (userColumns.includes('recovery_hash')) db.exec('ALTER TABLE users DROP COLUMN recovery_hash');
+if (!userColumns.includes('email')) db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+for (const column of ['secret_question', 'secret_hash', 'secret_salt', 'recovery_hash']) {
+  if (userColumns.includes(column)) db.exec(`ALTER TABLE users DROP COLUMN ${column}`);
+}
 
 // New accounts sign in with an email. Accounts made before emails existed keep a NULL email
 // until their owner adds one from Profil; a partial index keeps those NULLs from colliding while

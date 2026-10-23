@@ -5,6 +5,7 @@ const { promisify } = require('util');
 const express = require('express');
 const db = require('./db');
 const twofactor = require('./twofactor');
+const { sendMail, mailConfigured } = require('./email');
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = 'djournl_sid';
@@ -55,11 +56,6 @@ const hashPassword = async (password, salt) => (await scrypt(password, salt, 64)
 // be created, otherwise a fresh install could never be used.
 const userCount = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
 const signupOpen = () => userCount() === 0 || String(process.env.ALLOW_SIGNUP || 'true').toLowerCase() !== 'false';
-
-// SIGNUP_CODE turns registration into invite-only: an account can only be created by someone
-// who was given the code. On a server open to the internet this is what keeps strangers out.
-const signupCode = () => String(process.env.SIGNUP_CODE || '');
-const codeMatches = (given) => sameHex(sha256(String(given || '')), sha256(signupCode()));
 
 // Express 4 does not catch a rejected promise from an async handler: without this the request
 // would hang and the rejection would take the whole process down.
@@ -140,29 +136,14 @@ async function passwordMatches(userId, password) {
   return !!user && sameHex(await hashPassword(String(password || ''), user.pass_salt), user.pass_hash);
 }
 
-// The personal question is the "forgot my password" path: there is no email on file, so a
-// question only the account holder can answer takes its place. The answer is treated like a
-// second password — hashed with scrypt and its own salt, never stored or sent back — but
-// compared forgivingly: "Si Putih", "si putih" and "siputih!" are the same answer.
-const normalizeAnswer = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-const cleanQuestion = (s) => String(s || '').trim().replace(/\s+/g, ' ').slice(0, 120);
-const QUESTION_PROBLEM = { error: 'Pertanyaan pribadinya minimal 5 karakter dan jawabannya minimal 2 huruf, ya.' };
-const validQuestion = (question, answer) => cleanQuestion(question).length >= 5 && normalizeAnswer(answer).length >= 2 && String(answer).length <= 100;
-async function setQuestion(userId, question, answer) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  db.prepare('UPDATE users SET secret_question = ?, secret_hash = ?, secret_salt = ? WHERE id = ?')
-    .run(cleanQuestion(question), await hashPassword(normalizeAnswer(answer), salt), salt, userId);
-}
-// Shown for a name that has no account (or no question), picked by the name so it is always the
-// same one: the sign-in screen must not reveal which usernames exist.
-const DECOY_QUESTIONS = [
-  'Apa nama hewan peliharaan pertamamu?',
-  'Apa makanan favoritmu waktu kecil?',
-  'Siapa nama sahabat masa kecilmu?',
-  'Apa nama sekolah dasarmu?',
-  'Siapa nama guru yang paling kamu ingat?',
-];
-const decoyQuestion = (username) => DECOY_QUESTIONS[parseInt(sha256(username).slice(0, 8), 16) % DECOY_QUESTIONS.length];
+// A forgotten password is reset with a single-use link sent to the account's email. Only the
+// SHA-256 of the token is stored, exactly like a session token, and the link stops working after
+// half an hour or as soon as it has been used once.
+const RESET_MS = 30 * 60 * 1000;
+const resetLink = (req, token) => {
+  const base = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  return `${base}/?reset=${token}`;
+};
 
 /**
  * A small in-memory attempt counter: `max` hits per `windowMs` for each key. A restart clears
@@ -191,12 +172,12 @@ const loginFailures = limiter(8, 10 * 60 * 1000);
 // hash and a row. Behind a reverse proxy every visitor shares the proxy's address, so a busy
 // server may need SIGNUPS_PER_HOUR raised.
 const signups = limiter(Number(process.env.SIGNUPS_PER_HOUR) || 10, 60 * 60 * 1000);
-// Guessing the sign-up code: 10 wrong tries from one address, then a 10 minute pause.
-const codeGuesses = limiter(10, 10 * 60 * 1000);
-// Guessing a personal answer is far easier than guessing a password, so it gets far fewer
-// tries: 5 an hour for one account from one address, and 15 an hour for the account overall.
-const answerTries = limiter(5, 60 * 60 * 1000);
-const answerTriesPerAccount = limiter(15, 60 * 60 * 1000);
+// Asking for a reset link: 5 tries per address every 15 minutes. The answer is always the same,
+// so this only limits the mail that one address can cause us to send.
+const resetRequests = limiter(5, 15 * 60 * 1000);
+// Presenting a bad or expired reset token: 10 tries per address every 15 minutes. A real token
+// has 256 bits of randomness, so this is a backstop rather than the main protection.
+const resetTries = limiter(10, 15 * 60 * 1000);
 // Guessing a second factor is even less useful than guessing a password, so it gets fewer tries.
 const twoFactorTries = limiter(6, 10 * 60 * 1000);
 const twoFactorTriesPerUser = limiter(12, 60 * 60 * 1000);
@@ -211,7 +192,7 @@ function requireUser(req, res, next) {
   const token = readCookie(req, COOKIE);
   if (token) {
     const user = db.prepare(`
-      SELECT u.id, u.username, u.email, u.name, u.created_at AS createdAt, u.secret_question AS question,
+      SELECT u.id, u.username, u.email, u.name, u.created_at AS createdAt,
         COALESCE((SELECT enabled FROM totp WHERE user_id = u.id), 0) AS twoFactor,
         (SELECT COUNT(*) FROM recovery_codes WHERE user_id = u.id AND used_at IS NULL) AS recoveryCodesLeft
       FROM sessions s JOIN users u ON u.id = s.user_id
@@ -226,20 +207,13 @@ const router = express.Router();
 
 // Lets the sign-in screen know what to offer before anyone is logged in.
 router.get('/config', (req, res) => {
-  res.json({ signup: signupOpen(), firstAccount: userCount() === 0, needsCode: !!signupCode() });
+  res.json({ signup: signupOpen(), firstAccount: userCount() === 0, emailReset: mailConfigured() });
 });
 
 router.post('/register', wrap(async (req, res) => {
   if (!signupOpen()) return res.status(403).json({ error: 'Pendaftaran akun baru sedang ditutup. Coba hubungi pemilik server ini, ya.' });
   if (signups.blocked(req.ip)) return res.status(429).json({ error: 'Sudah banyak akun dibuat dari sini. Coba lagi nanti, ya.' });
   const body = req.body || {};
-  if (signupCode()) {
-    if (codeGuesses.blocked(req.ip)) return res.status(429).json(TOO_MANY);
-    if (!codeMatches(body.code)) {
-      codeGuesses.hit(req.ip);
-      return res.status(403).json({ error: 'Kode pendaftarannya belum cocok. Minta kodenya ke pemilik server ini, ya.' });
-    }
-  }
   const email = normalizeEmail(body.email);
   // A username is optional now that email is the sign-in identity. It stays supported for old
   // clients and for people who deliberately want a particular handle; otherwise it is derived.
@@ -251,9 +225,6 @@ router.post('/register', wrap(async (req, res) => {
     return res.status(400).json({ error: 'Nama pengguna perlu 3-24 karakter: huruf kecil, angka, titik, strip, atau garis bawah.' });
   }
   if (!validPassword(password)) return res.status(400).json(WEAK_PASSWORD);
-  // The page always asks for a personal question; when one is sent it has to be usable.
-  const wantsQuestion = body.question || body.answer;
-  if (wantsQuestion && !validQuestion(body.question, body.answer)) return res.status(400).json(QUESTION_PROBLEM);
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return res.status(409).json(EMAIL_TAKEN);
   const taken = { error: 'Nama pengguna itu sudah ada yang pakai. Coba nama lain, ya.' };
   if (requestedUsername && db.prepare('SELECT 1 FROM users WHERE username = ?').get(requestedUsername)) return res.status(409).json(taken);
@@ -285,7 +256,6 @@ router.post('/register', wrap(async (req, res) => {
     throw e;
   }
   signups.hit(req.ip);
-  if (wantsQuestion) await setQuestion(userId, body.question, body.answer);
   startSession(req, res, userId);
   res.json({ id: Number(userId), username, name, email });
 }));
@@ -341,45 +311,90 @@ router.post('/2fa', (req, res) => {
   res.json({ id: user.id, username: user.username, email: user.email, name: user.name });
 });
 
-// Forgot password, step 1: which question belongs to this email or legacy username. An unknown
-// name gets a plausible question too (always the same one), so this cannot be used to find out
-// who has an account.
-router.get('/question', (req, res) => {
-  const identifier = normalizeIdentifier(req.query.identifier || req.query.email || req.query.username);
-  const user = findByIdentifier(identifier);
-  res.json({ question: (user && user.secret_question) || decoyQuestion(identifier) });
-});
-
-// Forgot password, step 2: the right answer sets a new password, signs in, and ends every
-// other session. Wrong answers are tightly limited.
-router.post('/reset', wrap(async (req, res) => {
+// Forgot password, step 1: email a single-use link. The answer is deliberately identical for a
+// known address, an unknown one, and an account without an email on file, so this cannot be used
+// to find out who has an account.
+router.post('/forgot', wrap(async (req, res) => {
+  if (!mailConfigured()) {
+    return res.status(503).json({ error: 'Pengaturan ulang lewat email belum diaktifkan di server ini. Hubungi pemilik server, ya.' });
+  }
+  if (resetRequests.blocked(req.ip)) {
+    return res.status(429).json({ error: 'Terlalu banyak permintaan tautan dari sini. Coba lagi sekitar 15 menit lagi, ya.' });
+  }
+  resetRequests.hit(req.ip);
   const body = req.body || {};
   const identifier = normalizeIdentifier(body.identifier || body.email || body.username);
-  const password = String(body.password || '');
   const user = findByIdentifier(identifier);
-  const accountKey = user ? `u${user.id}` : identifier;
-  const key = `${accountKey}|${req.ip}`;
-  if (answerTries.blocked(key) || answerTriesPerAccount.blocked(accountKey)) {
-    return res.status(429).json({ error: 'Terlalu banyak percobaan untuk akun ini. Coba lagi sekitar satu jam lagi, ya.' });
+  if (user && user.email) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    db.transaction(() => {
+      db.prepare('DELETE FROM password_resets WHERE expires_at < ? OR used_at IS NOT NULL').run(now);
+      // Asking again replaces the previous link, so an old message cannot be used later.
+      db.prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL').run(user.id);
+      db.prepare('INSERT INTO password_resets (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+        .run(sha256(token), user.id, now, now + RESET_MS);
+    })();
+    try {
+      await sendMail({
+        to: user.email,
+        subject: 'Atur ulang kata sandi Djournl',
+        text: [
+          `Halo ${user.name},`,
+          '',
+          'Seseorang — mudah-mudahan kamu — meminta kata sandi baru untuk akun Djournl ini.',
+          'Buka tautan berikut untuk membuat kata sandi baru:',
+          '',
+          resetLink(req, token),
+          '',
+          'Tautan ini berlaku 30 menit dan hanya bisa dipakai sekali.',
+          'Kalau kamu tidak meminta ini, abaikan saja email ini; kata sandimu tidak berubah.',
+        ].join('\n'),
+      });
+    } catch (e) {
+      // The response stays the same so it cannot reveal whether an account exists; the server
+      // owner sees the real reason in the log.
+      console.error('Could not send password-reset email:', e.message);
+    }
+  }
+  res.json({ ok: true });
+}));
+
+// Forgot password, step 2: the emailed token sets a new password, signs in, and ends every other
+// session. A token works once and cannot be guessed.
+router.post('/reset', wrap(async (req, res) => {
+  const body = req.body || {};
+  const token = String(body.token || '');
+  const password = String(body.password || '');
+  if (resetTries.blocked(req.ip)) {
+    return res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sekitar 15 menit lagi, ya.' });
   }
   if (!validPassword(password)) return res.status(400).json(WEAK_PASSWORD);
-  // Hash even when there is nothing to compare with, and answer the same way whether the name
-  // or the answer is wrong, so neither the timing nor the message reveals which names exist.
-  const hash = await hashPassword(normalizeAnswer(body.answer), (user && user.secret_salt) || 'no-such-user');
-  if (!user || !user.secret_hash || !sameHex(hash, user.secret_hash)) {
-    answerTries.hit(key); answerTriesPerAccount.hit(accountKey);
-    return res.status(401).json({ error: 'Jawabannya belum cocok. Coba ingat-ingat lagi pelan-pelan, ya.' });
+  const now = Date.now();
+  const reset = token && db.prepare(`
+    SELECT r.token_hash, u.id, u.username, u.email, u.name
+    FROM password_resets r JOIN users u ON u.id = r.user_id
+    WHERE r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > ?
+  `).get(sha256(token), now);
+  if (!reset) {
+    resetTries.hit(req.ip);
+    return res.status(401).json({ error: 'Tautan pengaturan ulang ini sudah tidak berlaku. Minta tautan baru, ya.' });
   }
-  answerTries.clear(key);
-  await setPassword(user.id, password);
-  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+  resetTries.clear(req.ip);
+  await setPassword(reset.id, password);
+  db.transaction(() => {
+    db.prepare('UPDATE password_resets SET used_at = ? WHERE token_hash = ?').run(now, reset.token_hash);
+    db.prepare('DELETE FROM password_resets WHERE user_id = ? AND token_hash != ?').run(reset.id, reset.token_hash);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(reset.id);
+    db.prepare('DELETE FROM login_tickets WHERE user_id = ?').run(reset.id);
+  })();
   // Resetting a forgotten password must not be a way around the second factor.
-  if (twoFactorEnabled(user.id)) {
-    issueTicket(req, res, user.id);
-    return res.json({ twoFactor: true, username: user.username, email: user.email });
+  if (twoFactorEnabled(reset.id)) {
+    issueTicket(req, res, reset.id);
+    return res.json({ twoFactor: true, username: reset.username, email: reset.email });
   }
-  startSession(req, res, user.id);
-  res.json({ id: user.id, username: user.username, email: user.email, name: user.name });
+  startSession(req, res, reset.id);
+  res.json({ id: reset.id, username: reset.username, email: reset.email, name: reset.name });
 }));
 
 router.post('/logout', (req, res) => {
@@ -519,16 +534,8 @@ account.post('/password', wrap(async (req, res) => {
   // Anyone still signed in elsewhere with the old password is signed out; this device stays in.
   db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(req.user.id, sha256(readCookie(req, COOKIE) || ''));
   db.prepare('DELETE FROM login_tickets WHERE user_id = ?').run(req.user.id);
+  db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(req.user.id);
   res.json({ ok: true });
-}));
-
-// Sets or replaces the personal question used when the password is forgotten.
-account.post('/question', wrap(async (req, res) => {
-  const body = req.body || {};
-  if (!validQuestion(body.question, body.answer)) return res.status(400).json(QUESTION_PROBLEM);
-  if (!(await confirmPassword(req, res, body.password))) return;
-  await setQuestion(req.user.id, body.question, body.answer);
-  res.json({ question: cleanQuestion(body.question) });
 }));
 
 // Deletes the account and everything that belongs to it. A circle left without members goes too.
@@ -536,7 +543,7 @@ account.delete('/', wrap(async (req, res) => {
   if (!(await confirmPassword(req, res, req.body && req.body.password))) return;
   const id = req.user.id;
   db.transaction(() => {
-    for (const table of ['photos', 'entries', 'settings', 'sessions', 'circle_members', 'recovery_codes', 'login_tickets']) {
+    for (const table of ['photos', 'entries', 'settings', 'sessions', 'circle_members', 'recovery_codes', 'login_tickets', 'password_resets']) {
       db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(id);
     }
     db.prepare('DELETE FROM totp WHERE user_id = ?').run(id);

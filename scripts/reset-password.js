@@ -1,5 +1,5 @@
-// For whoever runs the server: gives an account a new temporary password when its owner has
-// forgotten both the password and the answer to their personal question. Everyone signed in to that account is signed out.
+// For whoever runs the server: gives an account a new temporary password when its owner cannot
+// use the emailed reset link. Everyone signed in to that account is signed out.
 //
 //   npm run reset-password -- <email-atau-nama-pengguna>
 const crypto = require('crypto');
@@ -24,9 +24,10 @@ async function main() {
   db.prepare('DELETE FROM totp WHERE user_id = ?').run(user.id);
   db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').run(user.id);
   db.prepare('DELETE FROM login_tickets WHERE user_id = ?').run(user.id);
+  db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
   console.log(`Kata sandi sementara untuk ${user.email || `@${user.username}`} (${user.name}): ${temporary}`);
   if (hadTwoFactor) console.log('Verifikasi dua langkah akun ini ikut dimatikan. Minta pemiliknya mengaktifkannya lagi setelah masuk.');
-  console.log('Minta pemilik akun masuk dengan kata sandi ini, lalu menggantinya dan mengatur ulang pertanyaan pribadinya di halaman Profil.');
+  console.log('Minta pemilik akun masuk dengan kata sandi ini, lalu menggantinya di halaman Profil.');
   return null;
 }
 

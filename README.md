@@ -10,8 +10,8 @@ Jurnal harian dengan mood tracker (beberapa catatan per hari), dashboard tren mo
 - **Dashboard** — streak, grafik mood 7/30 hari, pengamatan AI mingguan, **kalender mood** per bulan (ketuk tanggal untuk membuka catatannya), dan **streak bareng**.
 - **Riwayat** — **pencarian**, saringan mood, **#tag** (tulis `#kerja` di catatan, otomatis jadi tag), **favorit** (bintang per catatan), rangkuman AI, ekspor `.txt`, cetak/PDF, serta **cadangan `.json`** yang bisa dipulihkan lagi.
 - **Tur fitur** — saat pertama kali masuk, tiap akun diajak keliling langkah demi langkah (sekitar 13 langkah, bisa dilewati) melewati semua fitur di keempat halaman. Langkah yang tidak relevan dilewati sendiri, misalnya penjelasan kotak tulis saat empat langkah Harian sudah selesai. Tur bisa dibuka lagi kapan saja dari halaman Profil.
-- **Profil** — satu halaman untuk profil dan pengaturan: nama panggilan, **email**, ganti kata sandi, pertanyaan pribadi, **verifikasi dua langkah (TOTP)**, pengingat harian, tema, mode menulis, tur fitur, tombol keluar, **keluar dari perangkat lain**, dan hapus akun.
-- **Lupa kata sandi** — saat membuat akun, tiap orang memilih satu **pertanyaan pribadi** (atau menulis sendiri) beserta jawabannya. Di halaman masuk, "Lupa kata sandi?" meminta email akun (akun lama bisa memakai nama pengguna), lalu jawaban atas pertanyaan itu dan kata sandi baru. Huruf besar-kecil, spasi, dan tanda baca pada jawaban tidak berpengaruh. Kalau verifikasi dua langkah aktif, mengatur ulang kata sandi tetap meminta kode authenticator atau kode pemulihan.
+- **Profil** — satu halaman untuk profil dan pengaturan: nama panggilan, **email**, ganti kata sandi, **verifikasi dua langkah (TOTP)**, pengingat harian, tema, mode menulis, tur fitur, tombol keluar, **keluar dari perangkat lain**, dan hapus akun.
+- **Lupa kata sandi** — di halaman masuk, "Lupa kata sandi?" meminta email akun (akun lama bisa memakai nama pengguna), lalu mengirim **tautan sekali pakai lewat email** untuk membuat kata sandi baru. Tautannya berlaku 30 menit. Kalau verifikasi dua langkah aktif, mengatur ulang kata sandi tetap meminta kode authenticator atau kode pemulihan.
 - **Sapaan dan pertanyaan yang berganti** — sapaan berbeda untuk tiap bagian hari dan hari tertentu, 56 pertanyaan Check Up, dan enam susunan kata untuk tiap langkah Harian. Pilihannya tetap sepanjang satu hari dan berganti keesokan harinya.
 - **Akun** — satu server bisa dipakai beberapa orang. Tiap akun punya jurnal sendiri yang tidak bisa dibaca akun lain.
 
@@ -19,7 +19,7 @@ Jurnal harian dengan mood tracker (beberapa catatan per hari), dashboard tren mo
 
 Akun baru dibuat dengan **email + kata sandi**. Email disimpan dalam huruf kecil dan harus unik; nama pengguna internal dibuat otomatis dari bagian sebelum `@` (mis. `farrel`), jadi kamu tidak perlu memilih nama pengguna saat mendaftar. Masuk bisa memakai email itu, sedangkan akun lama tetap bisa memakai nama penggunanya.
 
-Email bisa diganti dari **Profil → Keamanan** dengan memasukkan kata sandi sekarang. Belum ada verifikasi email atau tautan reset lewat email karena Djournl tidak memakai layanan pengirim email; lupa kata sandi tetap memakai pertanyaan pribadi.
+Email bisa diganti dari **Profil → Keamanan** dengan memasukkan kata sandi sekarang. Lupa kata sandi memakai **tautan reset sekali pakai yang dikirim lewat email** (lihat variabel `RESEND_API_KEY` dan `EMAIL_FROM`); belum ada verifikasi alamat email, jadi pastikan alamatnya benar saat mendaftar atau menggantinya.
 
 ### Streak bareng
 
@@ -37,7 +37,7 @@ Verifikasi dua langkah bersifat opsional dan diaktifkan dari **Profil**. Setelah
 
 - Setelah aktif, masuk memakai kata sandi **dan** kode 6 angka yang berganti setiap 30 detik.
 - Saat aktivasi, aplikasi menampilkan **10 kode pemulihan sekali pakai**. Simpan di tempat aman: kode itu hanya ditampilkan sekali, dan masing-masing hanya bisa dipakai satu kali.
-- Kata sandi yang diatur ulang lewat pertanyaan pribadi tidak melewati verifikasi dua langkah; kode tetap diminta.
+- Kata sandi yang diatur ulang lewat tautan email tidak melewati verifikasi dua langkah; kode tetap diminta.
 - Kalau authenticator dan semua kode pemulihan hilang, pemilik server bisa menjalankan `npm run reset-password -- <email-atau-nama-pengguna>`. Perintah itu memberi kata sandi sementara sekaligus mematikan verifikasi dua langkah akun tersebut, jadi pemilik akun bisa masuk dan mengaktifkannya lagi.
 - Rahasia TOTP disimpan di database; kode pemulihan hanya disimpan sebagai hash SHA-256, sama seperti token sesi.
 
@@ -67,7 +67,9 @@ npm test   # menjalankan server sungguhan dengan database sementara, lalu menguj
 | `SIGNUPS_PER_HOUR` | `10` | Batas pembuatan akun per jam dari satu alamat IP |
 | `AI_DAILY_LIMIT` | `30` | Batas permintaan AI per akun per hari, karena semua akun memakai kunci API yang sama |
 | `PHOTO_LIMIT` | `2000` | Jumlah foto maksimal per akun |
-| `SIGNUP_CODE` | kosong | Kalau diisi, pendaftaran akun butuh kode ini. Isi kalau dipasang di internet |
+| `RESEND_API_KEY` | kosong | Kunci API Resend untuk mengirim tautan reset kata sandi. Tanpa ini fitur lupa kata sandi lewat email tidak aktif |
+| `EMAIL_FROM` | kosong | Pengirim email yang domainnya sudah diverifikasi di Resend, mis. `Djournl <no-reply@contoh.com>` |
+| `APP_URL` | alamat permintaan | Alamat publik aplikasi untuk tautan di email, mis. `https://jurnal.contoh.com`. Biasanya tidak perlu diisi |
 | `TRUST_PROXY` | kosong | Jumlah proxy di depan aplikasi (biasanya `1` di hosting). Kosongkan saat dijalankan langsung |
 | `AI_PROVIDER` dan kuncinya | `anthropic` | Lihat bagian di bawah |
 
@@ -85,7 +87,7 @@ Lihat `.env.example` untuk daftar lengkap variabelnya.
 
 ## Deploy
 
-**Panduan lengkap memasang di internet ada di [DEPLOY.md](DEPLOY.md)** (Fly.io, Railway, Render, atau VPS sendiri dengan HTTPS otomatis), termasuk kode pendaftaran dan cadangan rutin. Ringkasnya:
+**Panduan lengkap memasang di internet ada di [DEPLOY.md](DEPLOY.md)** (Fly.io, Railway, Render, atau VPS sendiri dengan HTTPS otomatis), termasuk pengaturan email reset dan cadangan rutin. Ringkasnya:
 
 **Docker (cara termudah):**
 ```bash
@@ -127,7 +129,8 @@ djournl-app/
 ├── .env.example
 ├── server/
 │   ├── index.js    # Express app + route jurnal, pengaturan, ekspor, AI
-│   ├── auth.js     # akun + sesi
+│   ├── auth.js     # akun + sesi + reset lewat email
+│   ├── email.js    # kirim tautan reset lewat Resend
 │   ├── twofactor.js # TOTP + kode pemulihan
 │   ├── circles.js  # streak bareng
 │   ├── photos.js   # foto di catatan
@@ -146,18 +149,17 @@ Semua route `/api/*` selain `/api/auth/*` butuh sesi masuk (cookie) dan hanya me
 
 | Method | Path | Fungsi |
 |---|---|---|
-| GET | `/api/auth/config` | `{signup, firstAccount, needsCode}` — apakah pendaftaran dibuka, apakah server ini belum punya akun, dan apakah perlu kode pendaftaran |
-| POST | `/api/auth/register` | Buat akun `{email, name?, password, question?, answer?, code?}` lalu langsung masuk. Nama pengguna dibuat otomatis dari email; `username` masih diterima kalau ingin menentukan sendiri |
+| GET | `/api/auth/config` | `{signup, firstAccount, emailReset}` — apakah pendaftaran dibuka, apakah server ini belum punya akun, dan apakah pengiriman email reset sudah dikonfigurasi |
+| POST | `/api/auth/register` | Buat akun `{email, name?, password}` lalu langsung masuk. Nama pengguna dibuat otomatis dari email; `username` masih diterima kalau ingin menentukan sendiri |
 | POST | `/api/auth/login` | Masuk dengan `{email, password}` atau `{username, password}` untuk akun lama; `{identifier, password}` juga diterima. 8 kali gagal = terkunci 10 menit. Kalau 2FA aktif, jawabannya `{twoFactor:true}` dan belum ada sesi |
 | POST | `/api/auth/2fa` | Langkah kedua masuk: `{code}` berisi 6 angka authenticator atau satu kode pemulihan. Butuh tiket 5 menit dari langkah pertama |
-| GET | `/api/auth/question?identifier=` | Pertanyaan pribadi milik email (atau nama pengguna lama) itu. Nama yang tidak dikenal tetap mendapat sebuah pertanyaan, supaya tidak ketahuan akun mana yang ada. `?email=` dan `?username=` juga diterima |
-| POST | `/api/auth/reset` | Lupa kata sandi: `{identifier, answer, password}` dengan email atau nama pengguna lama. Semua sesi lama dihapus. Paling banyak 5 percobaan per jam. Kalau 2FA aktif, langkah kedua tetap diminta |
+| POST | `/api/auth/forgot` | Kirim tautan reset ke email akun `{identifier}` (email atau nama pengguna lama). Jawabannya selalu `{ok:true}` supaya tidak membocorkan akun mana yang ada; `503` kalau email belum dikonfigurasi. Paling banyak 5 permintaan per 15 menit dari satu alamat |
+| POST | `/api/auth/reset` | Selesaikan reset dengan tautan email: `{token, password}`. Token sekali pakai dan berlaku 30 menit; semua sesi lama dihapus. Kalau 2FA aktif, langkah kedua tetap diminta |
 | POST | `/api/auth/logout` | Keluar; sesi dan tiket 2FA dihapus di server |
-| GET | `/api/me` | Akun yang sedang masuk: `{id, username, email, name, createdAt, question, twoFactor, recoveryCodesLeft}` |
+| GET | `/api/me` | Akun yang sedang masuk: `{id, username, email, name, createdAt, twoFactor, recoveryCodesLeft}` |
 | PATCH | `/api/account/profile` | Ganti nama panggilan `{name}` |
 | POST | `/api/account/email` | Atur atau ganti email `{email, password}`; email harus unik dan kata sandi sekarang wajib benar |
 | POST | `/api/account/password` | Ganti kata sandi `{current, next}`. Sesi di perangkat lain dihapus |
-| POST | `/api/account/question` | Atur atau ganti pertanyaan pribadi `{question, answer, password}` |
 | GET | `/api/account/security` | `{twoFactor, recoveryCodesLeft}` untuk halaman Profil |
 | POST | `/api/account/2fa/setup` | Mulai pengaturan 2FA `{password}`; jawabannya `{secret, uri}` untuk aplikasi authenticator |
 | POST | `/api/account/2fa/enable` | Konfirmasi dengan `{code}` dan dapatkan 10 kode pemulihan sekali tampil |
@@ -188,11 +190,11 @@ Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `
 
 ## Catatan jujur soal keterbatasan
 
-- **Lupa kata sandi bergantung pada pertanyaan pribadi.** Email memang dipakai untuk masuk, tetapi Djournl belum mengirim email: tidak ada verifikasi alamat dan tidak ada tautan reset lewat email. Jawaban pertanyaan pribadi lebih mudah ditebak orang yang mengenalmu daripada kata sandi, jadi percobaannya dibatasi ketat (5 per jam), dan sebaiknya pilih pertanyaan yang jawabannya benar-benar hanya kamu yang tahu. Yang lupa kata sandi **dan** jawabannya bisa dibantu pemilik server dengan `npm run reset-password -- <email-atau-nama-pengguna>`, yang mencetak kata sandi sementara. Akun yang dibuat sebelum fitur ini ada belum punya pertanyaan atau email; atur keduanya dari halaman Profil.
-- **Email belum diverifikasi.** Siapa pun bisa mendaftar dengan alamat yang bukan miliknya selama alamat itu belum dipakai akun lain. Email di sini adalah identitas masuk, bukan kanal pemulihan; jangan mengandalkannya untuk membuktikan pemilik akun.
-- **Verifikasi dua langkah bisa mengunci diri sendiri kalau kuncinya hilang.** Kode pemulihan hanya ditampilkan sekali saat aktivasi; simpan sebelum menutup halaman. Kalau authenticator dan semua kode pemulihan hilang, pemilik server harus menjalankan `npm run reset-password -- <email-atau-nama-pengguna>`, yang juga mematikan 2FA untuk akun itu. Tidak ada email pemulihan otomatis.
+- **Lupa kata sandi memakai email.** Tautan reset sekali pakai dikirim lewat Resend, jadi server harus punya `RESEND_API_KEY` dan `EMAIL_FROM` yang domainnya sudah diverifikasi. Kalau email tidak bisa diakses atau pengiriman belum dikonfigurasi, pemilik server bisa menjalankan `npm run reset-password -- <email-atau-nama-pengguna>` untuk memberi kata sandi sementara.
+- **Email belum diverifikasi.** Siapa pun bisa mendaftar dengan alamat yang bukan miliknya selama alamat itu belum dipakai akun lain. Email adalah identitas masuk dan kanal reset, tetapi Djournl tidak membuktikan bahwa alamat itu benar-benar milik pendaftar. Pastikan alamatnya benar saat mendaftar atau menggantinya.
+- **Verifikasi dua langkah bisa mengunci diri sendiri kalau kuncinya hilang.** Kode pemulihan hanya ditampilkan sekali saat aktivasi; simpan sebelum menutup halaman. Kalau authenticator dan semua kode pemulihan hilang, pemilik server harus menjalankan `npm run reset-password -- <email-atau-nama-pengguna>`, yang juga mematikan 2FA untuk akun itu. Tautan reset lewat email tetap meminta kode 2FA, jadi tautan itu saja tidak bisa membuka akun.
 - **Hapus akun bersifat permanen.** Tidak ada masa tunggu atau tempat sampah. Cadangkan dulu lewat Riwayat kalau catatannya masih diinginkan.
-- **Pendaftaran terbuka secara default.** Siapa pun yang tahu alamat server bisa membuat akun (jurnal tiap akun tetap terpisah). Set `ALLOW_SIGNUP=false` setelah semua orang yang kamu ajak sudah mendaftar.
+- **Pendaftaran terbuka secara default.** Siapa pun yang tahu alamat server bisa membuat akun (jurnal tiap akun tetap terpisah). Set `ALLOW_SIGNUP=false` setelah semua orang yang kamu ajak sudah mendaftar. Kode pendaftaran sudah dihapus; tutup pendaftaran lewat variabel itu.
 - **Pakai HTTPS kalau di-deploy.** Kata sandi dikirim saat masuk; tanpa HTTPS ia lewat jaringan tanpa enkripsi. Di balik reverse proxy HTTPS, cookie sesi otomatis diberi tanda `Secure`.
 - **Streak bareng hanya antar akun di server yang sama.** Dua instalasi Djournl yang terpisah tidak bisa saling terhubung.
 - **Kunci AI dipakai bersama.** Semua akun memakai provider AI yang sama dari `.env`, jadi biayanya ditanggung pemilik server.
@@ -207,7 +209,7 @@ Satu hari kini bisa punya beberapa catatan terpisah (kolom `notes`, JSON array `
 
 ## Pengujian
 
-`npm test` menjalankan server sungguhan dengan database sementara dan mengujinya lewat HTTP: akun dan sesi, **pendaftaran dan masuk dengan email**, nama pengguna otomatis yang unik, **mengganti email dari Profil**, isolasi jurnal antar akun, validasi catatan, tanggal lokal, cadangan dan pemulihan, aturan streak grup, foto (unggah, privasi antar akun, pembersihan, cadangan), jawaban saat AI belum diaktifkan, header keamanan, **2FA (setup, masuk, kode pemulihan sekali pakai, matikan)**, **reset kata sandi yang tetap meminta 2FA**, **keluar dari perangkat lain**, **penolakan permintaan lintas situs**, dan **batas panjang catatan**.
+`npm test` menjalankan server sungguhan dengan database sementara dan mengujinya lewat HTTP: akun dan sesi, **pendaftaran dan masuk dengan email**, nama pengguna otomatis yang unik, **mengganti email dari Profil**, isolasi jurnal antar akun, validasi catatan, tanggal lokal, cadangan dan pemulihan, aturan streak grup, foto (unggah, privasi antar akun, pembersihan, cadangan), jawaban saat AI belum diaktifkan, header keamanan, **2FA (setup, masuk, kode pemulihan sekali pakai, matikan)**, **lupa kata sandi lewat tautan email** (termasuk tautan sekali pakai dan penggantian tautan lama), **reset kata sandi yang tetap meminta 2FA**, **keluar dari perangkat lain**, **penolakan permintaan lintas situs**, dan **batas panjang catatan**. Pengiriman email diuji dengan server Resend tiruan di dalam test.
 
 Di luar itu, halaman utama sudah dijalankan di Chrome headless (ponsel dan desktop, terang dan gelap) untuk memeriksa alur daftar/masuk, ketiga tab, pemulihan draf, perubahan mood, foto dan kamera (dengan perangkat kamera simulasi), seluruh langkah tur fitur, tanggal di beberapa zona waktu, dan bahwa tidak ada pelanggaran Content-Security-Policy. UI 2FA yang baru diuji lewat HTTP end-to-end; pemeriksaan visual terakhirnya dilakukan saat deploy.
 
