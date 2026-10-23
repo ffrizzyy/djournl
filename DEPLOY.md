@@ -12,19 +12,29 @@ Panduan ini untuk memindahkan Djournl dari `localhost` ke alamat yang bisa dibuk
 
 | Variabel | Isi | Kenapa |
 |---|---|---|
-| `SMTP_HOST` | `smtp.gmail.com` | Server SMTP untuk mengirim tautan "Lupa kata sandi?". Cara termudah kalau belum punya domain. |
+| `BREVO_API_KEY` | kunci API dari https://www.brevo.com | Kirim tautan "Lupa kata sandi?" lewat HTTPS. **Paling cocok untuk Railway**, yang memblokir port SMTP. Verifikasi dulu alamat pengirim di Brevo. |
+| `EMAIL_FROM` | `Djournl <alamat@gmail.com>` | Pengirim yang muncul di email. Untuk Brevo/Gmail, pakai alamat yang sudah diverifikasi. |
+| `SMTP_HOST` | `smtp.gmail.com` | Hanya untuk hosting yang mengizinkan SMTP keluar (Fly.io, VPS, lokal). **Railway memblokir port 25/465/587**, jadi Gmail SMTP akan timeout di sana. |
 | `SMTP_PORT` | `465` | Port SMTP. `465` memakai TLS langsung; `587` memakai STARTTLS. |
-| `SMTP_USER` | alamat Gmail-mu | Akun yang mengirim email. |
+| `SMTP_USER` | alamat Gmail-mu | Akun yang mengirim email lewat SMTP. |
 | `SMTP_PASS` | App Password Gmail | **Bukan** kata sandi Gmail biasa. Buat di Google Account → Security → App passwords setelah 2-Step Verification aktif. |
-| `EMAIL_FROM` | `Djournl <alamat@gmail.com>` | Pengirim yang muncul di email. Untuk Gmail, samakan dengan `SMTP_USER`. |
-| `RESEND_API_KEY` | kunci API dari https://resend.com | Alternatif kalau nanti punya domain terverifikasi. Kalau SMTP lengkap, SMTP yang dipakai. |
+| `RESEND_API_KEY` | kunci API dari https://resend.com | Alternatif kalau punya domain terverifikasi. Dipakai kalau SMTP dan Brevo tidak diisi. |
 | `TRUST_PROXY` | `1` | Supaya aplikasi tahu alamat asli pengunjung dan bahwa mereka datang lewat HTTPS. Sudah diisi di berkas konfigurasi di bawah. |
 | `ANTHROPIC_API_KEY` | kunci API-mu | Opsional. Tanpa ini semua tetap jalan, hanya rangkuman AI yang tidak aktif. |
 | `ALLOW_SIGNUP` | `false` | Opsional, untuk nanti: menutup pendaftaran sepenuhnya setelah semua orang yang kamu ajak sudah punya akun. |
 
 Daftar lengkapnya ada di `.env.example`.
 
-### Kalau memakai Gmail
+### Kalau memakai Brevo (disarankan untuk Railway)
+
+1. Daftar gratis di https://www.brevo.com.
+2. Verifikasi alamat pengirim di **Senders, Domains & IPs → Senders → Add a sender** (mis. `Djournl <alamat@gmail.com>`). Brevo mengirim email verifikasi ke alamat itu; buka dan klik tautannya.
+3. Buat API key di **SMTP & API → API keys → Generate a new API key**. Salin kuncinya (biasanya diawali `xkeysib-`). Ini **bukan** SMTP key.
+4. Isi `BREVO_API_KEY=<kunci>` dan `EMAIL_FROM=Djournl <alamat@gmail.com>`.
+
+### Kalau memakai Gmail/SMTP
+
+Gmail SMTP hanya bisa dipakai di hosting yang mengizinkan koneksi SMTP keluar. **Railway memblokir port 25/465/587**, jadi di Railway pakai Brevo. Di Fly.io atau VPS:
 
 1. Aktifkan **2-Step Verification** di akun Google.
 2. Buka **Google Account → Security → App passwords**, buat satu untuk `Djournl`, lalu salin 16 karakter yang muncul.
@@ -60,7 +70,7 @@ Semua platform itu berbayar atau meminta kartu untuk disk persisten. Cek harga t
    ```
 4. Isi rahasianya (tidak pernah masuk ke git):
    ```bash
-   fly secrets set SMTP_HOST="smtp.gmail.com" SMTP_PORT="465" SMTP_USER="alamat@gmail.com" SMTP_PASS="app-password" EMAIL_FROM="Djournl <alamat@gmail.com>"
+   fly secrets set BREVO_API_KEY="xkeysib-..." EMAIL_FROM="Djournl <alamat@gmail.com>"
    fly secrets set ANTHROPIC_API_KEY="sk-ant-..."   # opsional
    ```
 5. Pasang dan buka:
@@ -77,7 +87,7 @@ Memperbarui setelah ada perubahan kode: `fly deploy` lagi. Datanya aman karena a
 
 1. Di https://railway.app pilih **New Project → Deploy from GitHub repo**, lalu pilih repo `djournl`. Railway membangun dari `Dockerfile` secara otomatis.
 2. Di layanan itu, tambahkan **Volume** dengan mount path `/app/data`.
-3. Di tab **Variables**, isi `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `TRUST_PROXY=1`, `PORT=3000`, dan (opsional) `ANTHROPIC_API_KEY`.
+3. Di tab **Variables**, isi `BREVO_API_KEY`, `EMAIL_FROM`, `TRUST_PROXY=1`, `PORT=3000`, dan (opsional) `ANTHROPIC_API_KEY`. Jangan pakai `SMTP_*` di Railway: port SMTP keluar diblokir.
 4. Di **Settings → Networking**, buat domain publik (port `3000`).
 
 Setiap `git push` ke `main` akan memasang versi baru.
@@ -85,7 +95,7 @@ Setiap `git push` ke `main` akan memasang versi baru.
 ## C. Render
 
 1. Di https://render.com pilih **New → Blueprint**, lalu pilih repo `djournl`. Render membaca `render.yaml`: satu layanan Docker dengan disk 1 GB di `/app/data`.
-2. Saat diminta, isi `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, dan (opsional) `ANTHROPIC_API_KEY`.
+2. Saat diminta, isi `BREVO_API_KEY`, `EMAIL_FROM`, dan (opsional) `ANTHROPIC_API_KEY`.
 3. Tunggu sampai statusnya *Live*, lalu buka alamat `onrender.com` yang diberikan.
 
 Disk di Render butuh paket berbayar; `render.yaml` sudah memilih paket `starter`.
@@ -104,12 +114,11 @@ Buka `.env`, lalu isi minimal:
 
 ```
 DOMAIN=jurnal.contoh.com
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_USER=alamat@gmail.com
-SMTP_PASS=app-password
+BREVO_API_KEY=xkeysib-...
 EMAIL_FROM=Djournl <alamat@gmail.com>
 ```
+
+Kalau VPS-mu mengizinkan SMTP keluar dan kamu lebih suka Gmail, ganti dua baris terakhir dengan `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, dan `EMAIL_FROM` (lihat `.env.example`).
 
 Jalankan:
 
@@ -158,7 +167,7 @@ Setiap orang juga bisa mencadangkan jurnalnya sendiri lewat **Riwayat → Cadang
 
 ## Kalau ada yang lupa kata sandi
 
-Yang masih bisa membuka emailnya bisa mengatur ulang sendiri lewat "Lupa kata sandi?" di halaman masuk: masukkan email akun (atau nama pengguna untuk akun lama), lalu buka tautan sekali pakai yang dikirim lewat SMTP atau Resend. Tautannya berlaku 30 menit.
+Yang masih bisa membuka emailnya bisa mengatur ulang sendiri lewat "Lupa kata sandi?" di halaman masuk: masukkan email akun (atau nama pengguna untuk akun lama), lalu buka tautan sekali pakai yang dikirim lewat Brevo, SMTP, atau Resend. Tautannya berlaku 30 menit.
 
 Kalau email tidak bisa diakses, atau pengiriman email belum dikonfigurasi, pemilik server bisa memberi kata sandi sementara:
 

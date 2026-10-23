@@ -35,8 +35,9 @@ before(async () => {
     env: {
       ...process.env, PORT: String(PORT), DATA_DIR: dataDir, AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '',
       ALLOW_SIGNUP: 'true', SIGNUPS_PER_HOUR: '100', TRUST_PROXY: '1',
-      // The tests exercise the Resend path; clear any SMTP settings from the developer's shell.
+      // The tests exercise the Resend path; clear any SMTP/Brevo settings from the developer's shell.
       SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASS: '',
+      BREVO_API_KEY: '', BREVO_API_URL: '',
       RESEND_API_KEY: 'test-key', EMAIL_FROM: 'Djournl <no-reply@example.test>',
       RESEND_API_URL: `http://127.0.0.1:${MAIL_PORT}/emails`, APP_URL: BASE,
     },

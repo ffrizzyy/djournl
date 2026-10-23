@@ -14,7 +14,9 @@ services:
     envVars:
       - key: TRUST_PROXY
         value: "1"
-      - key: SMTP_HOST       # e.g. smtp.gmail.com, filled in on the Render dashboard
+      - key: BREVO_API_KEY   # HTTPS email API; use this where outbound SMTP is blocked
+        sync: false
+      - key: SMTP_HOST       # e.g. smtp.gmail.com, for hosts that allow outbound SMTP
         sync: false
       - key: SMTP_PORT       # 465, or 587 for STARTTLS
         sync: false
@@ -24,7 +26,7 @@ services:
         sync: false
       - key: EMAIL_FROM      # e.g. "Djournl <you@gmail.com>"
         sync: false
-      - key: RESEND_API_KEY   # alternative to SMTP, needs a verified Resend domain
+      - key: RESEND_API_KEY   # alternative, needs a verified Resend domain
         sync: false
       - key: APP_URL          # the public address, for links in reset emails
         sync: false
